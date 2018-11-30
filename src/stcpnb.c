@@ -1,9 +1,9 @@
 #include <stdlib.h>	// NULL, EXIT_FAILURE, EXIT_SUCCESS
-#include <netdb.h>	// getaddrinfo()
 #include <unistd.h>	// close(), fcntl()
 #include <fcntl.h>	// fcntl()
 #include <sys/types.h>	// ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
+#include <netdb.h>	// getaddrinfo()
 
 /*
  * Creates a non-blocking TCP socket, either IPv4 or IPv6, depending on ip_type.
@@ -53,7 +53,7 @@ int stcpnb_create(int ip_type)
  * Initiates a connection for the TCP socket described by sockfd.
  * The ip_type should match the one used when the socket was created.
  * If the given ip_type is neither AF_INET nor AF_INET6, AF_INET (IPv4) is used.
- * Returns  0 if the connection was successfully initiated.
+ * Returns  0 if the connection was successfully initiated (is now in progress).
  * Returns -1 if connect() failed, in which case errno will be set.
  * Returns -2 if getaddrinfo() failed to translate host/port to an IP.
  */
@@ -65,23 +65,42 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
 		ip_type = AF_INET;
 	}
 
-	struct addrinfo hints;
-        hints.ai_family = ip_type;
+	// Not initializing the struct with { 0 } will result in garbage values
+	// that can (but not necessarily will) make getaddrinfo() fail!
+	struct addrinfo hints = { 0 };
+        hints.ai_family   = ip_type;
 	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
 
-	struct addrinfo *info;
+	struct addrinfo *info = NULL;
 	if (getaddrinfo(host, port, &hints, &info) != 0)
 	{
-		freeaddrinfo(info);
+		// Calling freeaddrinfo() when getaddrinfo() failed
+		// will give a segfault in case `info` is still NULL!
+		if (info != NULL)
+		{
+			freeaddrinfo(info);
+		}
 		return -2;
 	}
 
-	if (connect(sockfd, info->ai_addr, info->ai_addrlen) != 0)
+	// Attempt to initiate a connection
+	int con = connect(sockfd, info->ai_addr, info->ai_addrlen);
+	freeaddrinfo(info);
+
+	// connect() should return -1 for non-blocking sockets
+	if (con == -1)
 	{
-		freeaddrinfo(info);
+		// Connection in progress (that's what we expect!)
+		if (errno == EINPROGRESS || errno == EALREADY)
+		{
+			return 0;
+		}
+		// Some other error occured (damn)
 		return -1;
 	}
 
+	// connect() returned 0, so we're connected (erm... how?)
 	return 0;
 }
 /*
@@ -123,8 +142,11 @@ int stcpnb_status(int sockfd)
  */
 int stcpnb_send(int sockfd, const char *msg, size_t len)
 {
-	//ssize_t send(int sockfd, const void *buf, size_t len, int flags);
-	return 0;
+	/* 
+	 * On success, these calls return the number of bytes sent.  On error,
+	 * -1 is returned, and errno is set appropriately.
+	 */
+	return send(sockfd, msg, len, 0);
 }
 
 /*
@@ -132,8 +154,18 @@ int stcpnb_send(int sockfd, const char *msg, size_t len)
  */
 int stcpnb_receive(int sockfd, char *buf, size_t len)
 {
-	//ssize_t recv(int sockfd, void *buf, size_t len, int flags);
-	return 0;	
+	/*
+	 * These calls return the number of bytes received, or -1 if an error
+	 * occurred.  In the event of an error, errno is set to indicate the
+	 * error.
+	 *
+	 * When a stream socket peer has performed an orderly shutdown, the
+         * return value will be 0 (the traditional "end-of-file" return).
+	 *
+         * The value 0 may also be returned if the requested number of bytes to
+         * receive from a stream socket was 0.
+	 */
+	return recv(sockfd, buf, len, 0);
 }
 
 /*
