@@ -138,7 +138,7 @@ int stcpnb_status(int sockfd)
 }
 
 /*
- *
+ * TODO
  */
 int stcpnb_send(int sockfd, const char *msg, size_t len)
 {
@@ -150,22 +150,35 @@ int stcpnb_send(int sockfd, const char *msg, size_t len)
 }
 
 /*
- *
+ * Reads the buffer of the given socket. 
+ * Returns the number of bytes received on success
+ * Returns -1 if an error occured, check errno
+ * Returns -2 if the connection was closed
+ * Returns -3 if the given buffer length was 0
  */
 int stcpnb_receive(int sockfd, char *buf, size_t len)
 {
-	/*
-	 * These calls return the number of bytes received, or -1 if an error
-	 * occurred.  In the event of an error, errno is set to indicate the
-	 * error.
-	 *
-	 * When a stream socket peer has performed an orderly shutdown, the
-         * return value will be 0 (the traditional "end-of-file" return).
-	 *
-         * The value 0 may also be returned if the requested number of bytes to
-         * receive from a stream socket was 0.
-	 */
-	return recv(sockfd, buf, len, 0);
+	if (len == 0)
+	{
+		// Why you hand in a length of 0!?
+		return -3;
+	}
+	int ret = recv(sockfd, buf, len, 0);
+
+	if (ret == 0)
+	{
+		// Connection was closed!
+		return -2;
+	}
+
+	if (ret == -1)
+	{
+		// recv() ran into some kind of error
+		return -1;
+	}
+
+	// Everything went well!
+	return ret;
 }
 
 /*
