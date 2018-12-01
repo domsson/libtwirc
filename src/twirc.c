@@ -83,61 +83,83 @@ int twirc_send(struct twirc_state *state, const char *msg, size_t len)
 	buf[msg_len+1] = '\n';
 	buf[msg_len+2] = '\0';
 
-	fprintf(stderr, "twirc_send (%d): %s\n", strlen(buf), buf);
+	if (strncmp(msg, "PASS", 4) != 0)
+	{
+		fprintf(stderr, "twirc_send (%d): %s\n", strlen(buf), buf);
+	}
+
 	stcpnb_send(state->socket_fd, buf, buf_len);
 	free(buf);
 
 	return 1;
 }
 
-int twirc_recv(struct twirc_state *state /*, char *buf, size_t len */)
+/*
+ * TODO
+ * On success, returns the number of bytes read
+ * If no more data is left to read, returns 0
+ * If an error occured, -1 will be returned (check errno)
+ * If the connection was closed, -2 will be returned
+ */
+int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 {
 	ssize_t res_len;
-	char buf[1024];
-	res_len = recv(state->socket_fd, buf, 1024, MSG_TRUNC);
+	memset(buf, 0, len);
+	res_len = stcpnb_receive(state->socket_fd, buf, len);
+
 	buf[res_len] = '\0';
 
-	fprintf(stdout, "twirc_recv (%d): %s\n", res_len, buf);
+//	fprintf(stderr, "twirc_recv (%d): %s\n", res_len, buf);
 
-	if (res_len == 0)
+	if (strstr(buf, "\n") != NULL)
 	{
-		// TODO socket disconnected!
-		return 0;
+		fprintf(stderr, "There was line break in there! Hah!\n");
+	}
+
+	if (res_len == -2)
+	{
+		return -2;
 	}
 
 	if (res_len == -1)
 	{
-		// TODO error!
-		perror("recv() error");
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 		{
-			fprintf(stderr, "(EAGAIN or EWOULDBLOCK)\n");
+			// No more data to read right now!
+			return 0;
 		}
+		/*	
 		if (errno == EBADF)
 		{
 			fprintf(stderr, "(Invalid socket)\n");
 		}
+		*/
 		if (errno == ECONNREFUSED)
 		{
+			return -2;
 			fprintf(stderr, "(Connection refused)\n");
 		}
+		/*
 		if (errno == EFAULT)
 		{
 			fprintf(stderr, "(Buffer error)\n");
 		}
+		*/
 		if (errno == ENOTCONN)
 		{
+			return -2;
 			fprintf(stderr, "(Socket not connected)\n");
 		}
-		return 0;
+		
+		return -1;
 	}
 
-	if (res_len >= 1024)
+	// TODO
+	if (res_len >= len)
 	{
 		fprintf(stderr, "twirc_recv: (message truncated)");
-		return 0;
 	}
-	return 1;
+	return res_len;
 }
 
 /* how do we best pass in the credentials? just like this or in a struct? */
@@ -151,6 +173,7 @@ int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 
 	twirc_send(state, msg_pass, TWIRC_BUFFER_SIZE);
 	twirc_send(state, msg_nick, TWIRC_BUFFER_SIZE);
+	// TODO return;
 }
 
 int twirc_cmd_quit(struct twirc_state *state)
@@ -219,6 +242,29 @@ int twirc_loop(struct twirc_state *state)
 	return 0;	
 }
 
+int read_token(char *buf, size_t len)
+{
+	FILE *fp;
+	fp = fopen ("token", "r");
+	if (fp == NULL)
+	{
+		return 0;
+	}
+	char *res = fgets(buf, len, fp);
+	if (res == NULL)
+	{
+		fclose(fp);
+		return 0;
+	}
+	size_t res_len = strlen(buf);
+	if (buf[res_len-1] == '\n')
+	{
+		buf[res_len-1] = '\0';
+	}
+	fclose (fp);
+	return 1;
+}
+
 /*
  * main
  */
@@ -235,6 +281,14 @@ int main(void)
 	}
 
 	fprintf(stderr, "Successfully initialized twirc state...\n");
+
+	char token[128];
+	int token_success = read_token(token, 128);
+	if (token_success == 0)
+	{
+		fprintf(stderr, "Could not read token file\n");
+		return EXIT_FAILURE;
+	}
 
 	int epfd = epoll_create(1);
 	if (epfd < 0)
@@ -284,7 +338,18 @@ int main(void)
 		{
 			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
 			fprintf(stderr, "*socket ready for reading*\n");
-			twirc_recv(state);
+			char buf[1024];
+
+			while(twirc_recv(state, buf, 1024) > 0)
+			{
+				char *res;
+				int first = 1;
+				while((res = strtok(first ? buf : NULL, "\r\n")) != NULL)
+				{
+					first = 0;
+					fprintf(stderr, "MESSAGE RECEIVED BITCHES: %s\n", res);
+				}
+			}
 		}
 
 		if (epev.events & EPOLLOUT)
@@ -311,7 +376,7 @@ int main(void)
 				if (auth == 0)
 				{
 					fprintf(stderr, "Authenticating...\n");
-					twirc_auth(state, "kaulmate", "oauth:abc123");
+					twirc_auth(state, "kaulmate", token);
 					auth = 1;
 				}
 			}
