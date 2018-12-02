@@ -31,7 +31,7 @@ int stcpnb_create(int ip_type)
 		return -1;
 	}
 
-	// Get the current file descriptor flags	
+	// Get the current file descriptor flags
 	int get = fcntl(sfd, F_GETFL);
 	if (get == -1)
 	{
@@ -115,7 +115,6 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
  * Returns -1 if the socket reported an error and is probably disconnected.
  * Returns -2 if the socket status could not be queried.
  */
-
 int stcpnb_status(int sockfd)
 {
 	int err = 0;
@@ -138,51 +137,33 @@ int stcpnb_status(int sockfd)
 }
 
 /*
- * TODO
+ * Sends the given data using the given socket.
+ * On success, this function returns the number of bytes sent.
+ * On error, -1 is returned and errno is set appropriately.
+ * See the man page of send() for more details.
  */
 int stcpnb_send(int sockfd, const char *msg, size_t len)
 {
-	/* 
-	 * On success, these calls return the number of bytes sent.  On error,
-	 * -1 is returned, and errno is set appropriately.
-	 */
 	return send(sockfd, msg, len, 0);
 }
 
 /*
- * Reads the buffer of the given socket. 
- * Returns the number of bytes received on success
- * Returns -1 if an error occured, check errno
- * Returns -2 if the connection was closed
- * Returns -3 if the given buffer length was 0
+ * Reads the buffer of the given socket using recv().
+ * On success, this function returns the number of bytes received.
+ * On error, -1 is returend and errno is set appropriately.
+ * Returns 0 if the if the socket connection was shut down by peer
+ * or if the requested number of bytes to receives from the socket was 0.
+ * See the man page of recv() for more details.
  */
 int stcpnb_receive(int sockfd, char *buf, size_t len)
 {
-	if (len == 0)
-	{
-		// Why you hand in a length of 0!?
-		return -3;
-	}
-	int ret = recv(sockfd, buf, len, 0);
-
-	if (ret == 0)
-	{
-		// Connection was closed!
-		return -2;
-	}
-
-	if (ret == -1)
-	{
-		// recv() ran into some kind of error
-		return -1;
-	}
-
-	// Everything went well!
-	return ret;
+	return recv(sockfd, buf, len, 0);
 }
 
 /*
- * Returns 0 on succcess, -1 on error (see errno).
+ * Closes the given socket.
+ * Returns 0 on success, -1 on error (see errno).
+ * See the man page of close() for more details.
  */
 int stcpnb_close(int sockfd)
 {
