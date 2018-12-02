@@ -5,6 +5,7 @@
 #include <unistd.h>	// close(), fcntl()
 #include <string.h>	// strerror()
 #include <fcntl.h>	// fcntl()
+#include <ctype.h>	// isspace()
 #include <sys/types.h>	// ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
@@ -45,24 +46,27 @@ struct twirc_creds
 };
 */
 
+/*
+ * Initiates a connection with the given server.
+ * Returns  0 if connection is in progress
+ * Returns -1 if connection attempt failed (check errno!)
+ * Returns -2 if host/port could not be resolved to IP
+ */
 int twirc_connect(struct twirc_state *state, const char *host, const char *port)
 {
-	// Returns  0 if connection is in progress
-	// Returns -1 if connection attempt failed (check errno!)
-	// Returns -2 if host/port could not be resolved to IP
 	int con = stcpnb_connect(state->socket_fd, state->ip_type, host, port);
-
-	if (con < 0)
+	if (con == 0)
 	{
-		// Socket could not be connected
-		fprintf(stderr, "Socket connection failed with error code %d\n", con);
-		return 0;
+		state->status = TWIRC_STATUS_CONNECTING;
 	}
-
-	state->status = TWIRC_STATUS_CONNECTING;
-	return 1;
+	return con;
 }
 
+/*
+ * Sends data to the IRC server, using the state's socket.
+ * On succcess, returns the number of bytes sent.
+ * On error, -1 is returned and errno is set appropriately.
+ */
 int twirc_send(struct twirc_state *state, const char *msg, size_t len)
 {
 	// Get the actual message length (without null terminator)
@@ -88,38 +92,32 @@ int twirc_send(struct twirc_state *state, const char *msg, size_t len)
 		fprintf(stderr, "twirc_send (%d): %s\n", strlen(buf), buf);
 	}
 
-	stcpnb_send(state->socket_fd, buf, buf_len);
+	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
 	free(buf);
 
-	return 1;
+	return ret;
 }
 
+// https://faq.cprogramming.com/cgi-bin/smartfaq.cgi?id=1044780608&answer=1108255660
 /*
- * TODO
- * On success, returns the number of bytes read
- * If no more data is left to read, returns 0
- * If an error occured, -1 will be returned (check errno)
- * If the connection was closed, -2 will be returned
+ * Reads data from the socket and puts it into buf.
+ * On success, returns the number of bytes read.
+ * If no more data is left to read, returns 0.
+ * If an error occured, -1 will be returned (check errno),
+ * this usually means the connection has been lost or the 
+ * socket is not valid (anymore).
  */
 int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 {
-	ssize_t res_len;
+	// Make sure there is no garbage in the buffer
 	memset(buf, 0, len);
-	res_len = stcpnb_receive(state->socket_fd, buf, len);
+	
+	// Receive data
+	ssize_t res_len;
+	res_len = stcpnb_receive(state->socket_fd, buf, len - 1);
 
-	buf[res_len] = '\0';
-
-//	fprintf(stderr, "twirc_recv (%d): %s\n", res_len, buf);
-
-	if (strstr(buf, "\n") != NULL)
-	{
-		fprintf(stderr, "There was line break in there! Hah!\n");
-	}
-
-	if (res_len == -2)
-	{
-		return -2;
-	}
+	// Make sure that the data received is null terminated
+	buf[res_len] = '\0'; // TODO Do we need this? we already memset()
 
 	if (res_len == -1)
 	{
@@ -128,41 +126,43 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 			// No more data to read right now!
 			return 0;
 		}
-		/*	
+		return -1;
+		/*
 		if (errno == EBADF)
 		{
 			fprintf(stderr, "(Invalid socket)\n");
 		}
-		*/
 		if (errno == ECONNREFUSED)
 		{
-			return -2;
 			fprintf(stderr, "(Connection refused)\n");
 		}
-		/*
 		if (errno == EFAULT)
 		{
 			fprintf(stderr, "(Buffer error)\n");
 		}
-		*/
 		if (errno == ENOTCONN)
 		{
-			return -2;
 			fprintf(stderr, "(Socket not connected)\n");
 		}
-		
-		return -1;
+		*/	
 	}
 
-	// TODO
+	/* 
 	if (res_len >= len)
 	{
 		fprintf(stderr, "twirc_recv: (message truncated)");
 	}
+	*/
 	return res_len;
 }
 
-/* how do we best pass in the credentials? just like this or in a struct? */
+/*
+ * Authenticates with the Twitch Server using the NICK and PASS commands.
+ * You are not automatically authenticated when this function returns,
+ * you need to wait for the server's reply (MOTD) first.
+ * Returns 0 if both commands were send successfully, -1 on error.
+ * TODO: See if we can't send both commands in one - what's better?
+ */
 int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 {
 	char msg_pass[TWIRC_BUFFER_SIZE];
@@ -171,25 +171,38 @@ int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 	char msg_nick[TWIRC_BUFFER_SIZE];
 	snprintf(msg_nick, TWIRC_BUFFER_SIZE, "NICK %s", nick);
 
-	twirc_send(state, msg_pass, TWIRC_BUFFER_SIZE);
-	twirc_send(state, msg_nick, TWIRC_BUFFER_SIZE);
-	// TODO return;
+	if (twirc_send(state, msg_pass, TWIRC_BUFFER_SIZE) == -1)
+	{
+		return -1;
+	}
+	if (twirc_send(state, msg_nick, TWIRC_BUFFER_SIZE) == -1)
+	{
+		return -1;
+	}
+	return 0;
 }
 
+/*
+ * Sends the QUIT command to the IRC server.
+ * Returns 0 on success, -1 otherwise. 
+ */
 int twirc_cmd_quit(struct twirc_state *state)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "QUIT");
-	twirc_send(state, msg, TWIRC_BUFFER_SIZE);
-	return 1; // TODO
+	return twirc_send(state, msg, TWIRC_BUFFER_SIZE);
 }
 
+/*
+ * Sends the QUIT command to the server, then terminates the connection.
+ * Returns 0 on success, -1 on error (see errno).
+ */ 
 int twirc_disconnect(struct twirc_state *state)
 {
 	twirc_cmd_quit(state);
-	stcpnb_close(state->socket_fd);
+	int ret = stcpnb_close(state->socket_fd);
 	state->status = TWIRC_STATUS_DISCONNECTED;
-	return 1; // TODO
+	return ret;
 }
 
 /*
@@ -219,13 +232,19 @@ struct twirc_state* twirc_init()
 	return state;
 }
 
+/*
+ * Frees the twirc_state and all of its members.
+ */
 int twirc_free(struct twirc_state *state)
 {
 	// no members to free... yet
 	free(state);
-	return 1; // TODO
+	return 0;
 }
 
+/*
+ * Schwarzeneggers the connection with the server and frees the twirc_state.
+ */
 int twirc_kill(struct twirc_state *state)
 {
 	if (state->status == TWIRC_STATUS_CONNECTED)
@@ -233,15 +252,20 @@ int twirc_kill(struct twirc_state *state)
 		twirc_disconnect(state);
 	}
 	twirc_free(state);
-	return 1; // TODO
+	return 0; 
 }
 
+/*
+ * TODO
+ */
 int twirc_loop(struct twirc_state *state)
 {
-	// TODO
 	return 0;	
 }
 
+/*
+ * TMP
+ */
 int read_token(char *buf, size_t len)
 {
 	FILE *fp;
@@ -263,6 +287,48 @@ int read_token(char *buf, size_t len)
 	}
 	fclose (fp);
 	return 1;
+}
+
+/*
+ * Copies the contents of dest into src, but only until it finds the first 
+ * null terminator. Returns the number of bytes copied + 1, so this value 
+ * can be used as an offset for successive calls of this function.
+ * Starts reading from the offset given in off. 
+ * The copied line will be stripped of IRC line endings (\r\n).
+ */
+size_t pop_first_line(char *dest, size_t len, const char *src, size_t off)
+{
+	// Copy everything from offset to the next null terminator
+	char *cpy = strncpy(dest, src + off, len);
+	// Make sure the copied string is terminated (in case of buffer overflow)
+	cpy[len-1] = '\0';
+	// Check how many bytes we actually copied
+	size_t cpy_len = strlen(cpy);
+	// Remove IRC line endings from the end of the string
+	if (cpy_len > 2 && isspace(cpy[cpy_len-2]))
+	{
+		cpy[cpy_len - 2] = '\0';
+	}
+	if (cpy_len > 1 && isspace(cpy[cpy_len-1]))
+	{
+		cpy[cpy_len - 1] = '\0';
+	}
+	// Return offset to the next line
+	// That means we need to add 1 for the null terminator
+	return off + cpy_len + 1;
+}
+
+void tmp_dump_lines(char *buf, size_t len)
+{
+	char line[TWIRC_BUFFER_SIZE];
+	line[0] = '\0';
+	size_t off = 0;
+	int lc = 0;
+	while ((off = pop_first_line(line, TWIRC_BUFFER_SIZE, buf, off)) <= len)
+	{
+		fprintf(stderr, "%d (%d): %s\n", ++lc, off, line);
+		memset(line, 0, TWIRC_BUFFER_SIZE);
+	}
 }
 
 /*
@@ -310,7 +376,7 @@ int main(void)
 
 	fprintf(stderr, "Socket registered for IO...\n");
 
-	if (twirc_connect(s, "irc.chat.twitch.tv", "6667") == 0)
+	if (twirc_connect(s, "irc.chat.twitch.tv", "6667") != 0)
 	{
 		fprintf(stderr, "Could not connect socket\n");
 		return EXIT_FAILURE;
@@ -325,6 +391,7 @@ int main(void)
 
 	int running = 1;
 	int auth = 0;
+	int joined = 0;
 	while (running)
 	{
 		int num_events = epoll_wait(epfd, &epev, 1, 1 * 1000);
@@ -339,16 +406,17 @@ int main(void)
 			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
 			fprintf(stderr, "*socket ready for reading*\n");
 			char buf[1024];
-
-			while(twirc_recv(state, buf, 1024) > 0)
+			int bytes_received = 0;
+			while ((bytes_received = twirc_recv(state, buf, 1024)) > 0)
 			{
-				char *res;
-				int first = 1;
-				while((res = strtok(first ? buf : NULL, "\r\n")) != NULL)
-				{
-					first = 0;
-					fprintf(stderr, "MESSAGE RECEIVED BITCHES: %s\n", res);
-				}
+				tmp_dump_lines(buf, bytes_received);
+
+			}
+			if (!joined)
+			{
+				char join[] = "JOIN #domsson";
+				twirc_send(s, join, strlen(join));
+				joined = 1;
 			}
 		}
 
@@ -372,7 +440,6 @@ int main(void)
 				{
 					fprintf(stderr, "Could not get socket status\n");
 				}
-				//stcpnb_status(state->socket_fd);
 				if (auth == 0)
 				{
 					fprintf(stderr, "Authenticating...\n");
@@ -380,7 +447,6 @@ int main(void)
 					auth = 1;
 				}
 			}
-			//twirc_sock_snd(state, "PING", 5);
 		}
 
 		if (epev.events & EPOLLRDHUP)
