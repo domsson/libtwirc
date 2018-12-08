@@ -68,7 +68,7 @@ int twirc_connect(struct twirc_state *state, const char *host, const char *port)
  * On succcess, returns the number of bytes sent.
  * On error, -1 is returned and errno is set appropriately.
  */
-int twirc_send(struct twirc_state *state, const char *msg, size_t len)
+int twirc_send(struct twirc_state *state, const char *msg)
 {
 	// Get the actual message length (without null terminator)
 	// If the message is too big for the message buffer, we only
@@ -172,11 +172,11 @@ int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 	char msg_nick[TWIRC_BUFFER_SIZE];
 	snprintf(msg_nick, TWIRC_BUFFER_SIZE, "NICK %s", nick);
 
-	if (twirc_send(state, msg_pass, TWIRC_BUFFER_SIZE) == -1)
+	if (twirc_send(state, msg_pass) == -1)
 	{
 		return -1;
 	}
-	if (twirc_send(state, msg_nick, TWIRC_BUFFER_SIZE) == -1)
+	if (twirc_send(state, msg_nick) == -1)
 	{
 		return -1;
 	}
@@ -191,7 +191,7 @@ int twirc_cmd_quit(struct twirc_state *state)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "QUIT");
-	return twirc_send(state, msg, TWIRC_BUFFER_SIZE);
+	return twirc_send(state, msg);
 }
 
 /*
@@ -484,13 +484,13 @@ int main(void)
 			if (!joined)
 			{
 				char join[] = "JOIN #domsson";
-				twirc_send(s, join, strlen(join));
+				twirc_send(s, join);
 				joined = 1;
 			}
 			if (joined && !hello)
 			{
-				char world[] = "PRIVMSG #domsson :Hardcoded messages are the best";
-				twirc_send(s, world, strlen(world));
+				char world[] = "PRIVMSG #domsson :jobruce is the best!";
+				twirc_send(s, world);
 				hello = 1;
 			}
 		}
