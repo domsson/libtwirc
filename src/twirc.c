@@ -34,6 +34,7 @@ struct twirc_state
 	int status;
 	int ip_type;
 	int socket_fd;
+	char *buffer;
 };
 
 /*
@@ -219,6 +220,8 @@ struct twirc_state* twirc_init()
 	state->status = TWIRC_STATUS_DISCONNECTED;
 	state->ip_type = TWIRC_IPV4;
 	state->socket_fd = -1;
+	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
+	state->buffer[0] = '\0';
 
 	// Create socket
 	state->socket_fd = stcpnb_create(state->ip_type);
@@ -237,7 +240,7 @@ struct twirc_state* twirc_init()
  */
 int twirc_free(struct twirc_state *state)
 {
-	// no members to free... yet
+	free(state->buffer);
 	free(state);
 	return 0;
 }
@@ -264,7 +267,10 @@ int twirc_loop(struct twirc_state *state)
 }
 
 /*
- * TMP
+ * TMP: reads the oauth token for the bot from a file.
+ * Obviously, this data will later be provided by the user.
+ * Once we're done with the library, this function can and
+ * should be deleted.
  */
 int read_token(char *buf, size_t len)
 {
@@ -290,46 +296,101 @@ int read_token(char *buf, size_t len)
 }
 
 /*
- * Copies the contents of dest into src, but only until it finds the first 
- * null terminator. Returns the number of bytes copied + 1, so this value 
- * can be used as an offset for successive calls of this function.
- * Starts reading from the offset given in off. 
- * The copied line will be stripped of IRC line endings (\r\n).
+ * Copies a portion of src to dest. The copied part will start from the offset given
+ * in off and end at the next null terminator encountered, but at most slen bytes. 
+ * The copied string will be null terminated, even if no null terminator was read from
+ * src. If dlen is not sufficient to store the copied string plus the null terminator,
+ * or if the given offset points to the end or beyond src, -1 is returned.
+ * Returns the number of bytes copied + 1, so this value can be used as an offset for 
+ * successive calls of this function, or slen if all chunks have been read. 
  */
-size_t pop_first_line(char *dest, size_t len, const char *src, size_t off)
+int shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
 {
+	/*
+	 | recv() 1    | recv() 2       |
+	 |-------------|----------------|
+	 | SOMETHING\r | \n\0ELSE\r\n\0 |
+	
+	 chunk 1 -> SOMETHING\0
+	 chunk 2 -> \0
+	 chunk 3 -> ELSE\0
+	
+	 | recv(1)     | recv() 2      |
+	 |-------------|---------------|
+	 | SOMETHING\r | \nSTUFF\r\n\0 |
+	
+	 chunk 1 -> SOMETHING\0
+	 chunk 2 -> \nSTUFF\0
+	*/
+	
+	// Determine the maximum number of bytes we'll have to read
+	size_t chunk_len = slen - off;
+	// Invalid offset (or maybe we're just done reading src)
+	if (chunk_len <= 0)
+	{
+		return -1;
+	}
+	// Figure out the maximum size we can read
+	size_t max_len = dlen < chunk_len ? dlen : chunk_len;
 	// Copy everything from offset to the next null terminator
-	char *cpy = strncpy(dest, src + off, len);
-	// Make sure the copied string is terminated (in case of buffer overflow)
-	cpy[len-1] = '\0';
-	// Check how many bytes we actually copied
-	size_t cpy_len = strlen(cpy);
-	// Remove IRC line endings from the end of the string
-	if (cpy_len > 2 && isspace(cpy[cpy_len-2]))
+	strncpy(dest, src + off, max_len); // TODO can simplify by using stpncpy()
+	// Check how much we've actually written to the dest buffer
+	size_t cpy_len = strnlen(dest, max_len);
+	// Check if we've entirely filled the buffer (no space for \0)
+	if (cpy_len == dlen)
 	{
-		cpy[cpy_len - 2] = '\0';
+		return -1;
 	}
-	if (cpy_len > 1 && isspace(cpy[cpy_len-1]))
-	{
-		cpy[cpy_len - 1] = '\0';
-	}
-	// Return offset to the next line
-	// That means we need to add 1 for the null terminator
-	return off + cpy_len + 1;
+	// Make sure there is a null terminator at the end, even if
+	// there was no null terminator in the copied string
+	dest[cpy_len] = '\0';
+	// Calculate the offset to the next chunk (+1 to skill null terminator)
+	size_t new_off = off + cpy_len + 1;
+	// If we've read all data, return slen, otherwise the offset to the next chunk
+	return new_off >= slen ? slen : new_off;
 }
 
-void tmp_dump_lines(char *buf, size_t len)
+/*
+ * TODO
+ */
+int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_received)
 {
-	char line[TWIRC_BUFFER_SIZE];
-	line[0] = '\0';
-	size_t off = 0;
+	char chunk[TWIRC_BUFFER_SIZE];
+	chunk[0] = '\0';
+	int off = 0;
 	int lc = 0;
-	while ((off = pop_first_line(line, TWIRC_BUFFER_SIZE, buf, off)) <= len)
+
+	while ((off = shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
 	{
-		fprintf(stderr, "%d (%d): %s\n", ++lc, off, line);
-		memset(line, 0, TWIRC_BUFFER_SIZE);
+		/*
+		if (chunk[strlen(chunk)-1] == '\n' && chunk[strlen(chunk)-2] == '\r')
+		{
+			if (strlen(state->buffer) > 0)
+			{
+			*/
+				fprintf(stderr, "%d (%d): %s\n", ++lc, off, chunk);
+				continue;
+			/*
+			}
+			fprintf(stderr, "We need to concat that shit!\n");
+		}
+		if (strlen(state->buffer) > 0)
+		{
+			fprintf(stderr, "We need to add this incompelte shit to what's already in the buffer!\n");
+			continue;
+		}
+		//strcpy(state->buffer, chunk);
+		fprintf(stderr, "We need to buffer that incomplete piece of shit!\n");
+		*/
 	}
 }
+
+/*
+ * REMOVE WHITESPACE FROM THE END OF THIS STUHURINGU
+ *
+ * while ((len = strlen(chunk)) > 0 && isspace(chunk[len-1])) chunk[len-1]='\0'
+ *
+ */
 
 /*
  * main
@@ -376,6 +437,12 @@ int main(void)
 
 	fprintf(stderr, "Socket registered for IO...\n");
 
+	size_t n = 0;
+	socklen_t m = sizeof(n);
+	getsockopt(s->socket_fd, SOL_SOCKET, SO_RCVBUF, (void *)&n, &m);
+	
+	fprintf(stderr, "recv() wants a buffer of size %d bytes\n", n);
+
 	if (twirc_connect(s, "irc.chat.twitch.tv", "6667") != 0)
 	{
 		fprintf(stderr, "Could not connect socket\n");
@@ -392,6 +459,7 @@ int main(void)
 	int running = 1;
 	int auth = 0;
 	int joined = 0;
+	int hello = 0;
 	while (running)
 	{
 		int num_events = epoll_wait(epfd, &epev, 1, 1 * 1000);
@@ -409,7 +477,8 @@ int main(void)
 			int bytes_received = 0;
 			while ((bytes_received = twirc_recv(state, buf, 1024)) > 0)
 			{
-				tmp_dump_lines(buf, bytes_received);
+				twirc_process_data(state, buf, bytes_received);
+				//tmp_dump_lines(buf, bytes_received);
 
 			}
 			if (!joined)
@@ -417,6 +486,12 @@ int main(void)
 				char join[] = "JOIN #domsson";
 				twirc_send(s, join, strlen(join));
 				joined = 1;
+			}
+			if (joined && !hello)
+			{
+				char world[] = "PRIVMSG #domsson :Hardcoded messages are the best";
+				twirc_send(s, world, strlen(world));
+				hello = 1;
 			}
 		}
 
