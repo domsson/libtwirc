@@ -27,7 +27,7 @@
 #define TWIRC_STATUS_CONNECTING   1
 #define TWIRC_STATUS_CONNECTED    2
 
-#define TWIRC_BUFFER_SIZE 1024
+#define TWIRC_BUFFER_SIZE 64 * 1024
 
 struct twirc_state
 {
@@ -363,6 +363,9 @@ size_t shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t
 }
 
 /*
+ * Process the received data, stored in buf, with a length of bytes_received.
+ * Incomplete commands should be buffered in state->buffer, complete commands
+ * should be processed right away.
  * TODO
  */
 int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_received)
@@ -389,29 +392,41 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 
 	while ((off = shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
 	{
+		// Here, we'll just add all chunks to the state buffer (which might
+		// already contain parts of an incomplete IRC command), we'll process
+		// them in a second step. TODO we'll need to make sure that the buffer
+		// is sufficiently big to contain more than one 'delivery' in case one
+		// of them is incomplete, but the next one is (plus brings what was 
+		// missing of the first one).
+
 		// Concatenate the current buffer and the newly extracted chunk
 		strcat(state->buffer, chunk);
-
-		// Check the current length of the buffer
-		size_t buf_len = strlen(state->buffer);
-
-		// See if we have an IRC line break in the buffer
-		// TODO: There might be more than one! If the previous chunk contained
-		// part of a line break (say only '\r') and the next chunk contains both
-		// the rest of that line break ('\n') but also an additional, complete
-		// command with its own line break ('\r\n') following, then we now have
-		// two complete commands in the buffer! We need to account for that!
-		char *newline = strstr(state->buffer, "\r\n");
-		if (newline != NULL)
-		{
-			// Replace "\r\n" with two null terminators
-			strcpy(newline, "\0\0");
-			fprintf(stderr, "> %s\n", state->buffer);
-			// Now remove the processed segment (until the \r\n) but leave everything
-			// after it in the buffer -- TODO
-			state->buffer[0] = '\0';
-		}
 	}
+
+	//fprintf(stderr, "IRC cmd buffer (%d): \n%s\n", strlen(state->buffer), state->buffer);
+	
+	// TODO issue: strtok modifies the input str and I don't yet fully understand
+	// how it does so. Maybe we need to first make a copy of your buffer (ugh...)
+	// and pass that to strtok or we need to investigate what strtok leaves us 
+	// with after it's done its work, so we can understand how to treat whatever 
+	// is left in the buffer afterwards...
+
+	char *token = strtok(state->buffer, "\r\n");
+	while ((token = strtok(NULL, "\r\n")) != NULL)
+	{
+		// Here, we're lookin at each IRC command in the buffer. There will be 
+		// no "\r\n" at the end of those, as strtok returns string without the
+		// delimiter. However, if there is some more stuff in the buffer that 
+		// did not have a line break (meaning it wasn't a complete command, so
+		// there was data missing), that means strtok will not return that
+		// part of the buffer to us. That's actually good, because we just 
+		// want to leave that in the buffer until we receive the missing parts.
+		fprintf(stderr, "> %s (%d)\n", token, strlen(token));
+
+		// TODO: remove the processed tokens from the buffer!
+	}
+
+	//fprintf(stderr, "IRC cmd buffer (%d): \n%s\n", strlen(state->buffer), state->buffer);
 }
 
 /*
