@@ -103,6 +103,7 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
 	// connect() returned 0, so we're connected (erm... how?)
 	return 0;
 }
+
 /*
  * Queries getsockopt() for the socket status in an attempt to figure out
  * whether the socket is connected. Note that this should not be used unless
