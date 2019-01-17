@@ -403,7 +403,7 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 		strcat(state->buffer, chunk);
 	}
 
-	//fprintf(stderr, "IRC cmd buffer (%d): \n%s\n", strlen(state->buffer), state->buffer);
+	fprintf(stderr, "IRC cmd buffer (%d): \n%s\n", strlen(state->buffer), state->buffer);
 	
 	// TODO issue: strtok modifies the input str and I don't yet fully understand
 	// how it does so. Maybe we need to first make a copy of your buffer (ugh...)
@@ -411,8 +411,13 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	// with after it's done its work, so we can understand how to treat whatever 
 	// is left in the buffer afterwards...
 
-	char *token = strtok(state->buffer, "\r\n");
-	while ((token = strtok(NULL, "\r\n")) != NULL)
+	// TODO even bigger issue: the delimiter handed to strtok is not being treated
+	// as string (one delimiter), but instead as chars (multiple one-char delims),
+	// so it will split on every '\', on every 'r', etc... although... now when I
+	// look at our output, then it really doesn't... I'm confused. Investigate!
+
+	char *token = NULL;
+	while ((token = strtok(token == NULL ? state->buffer : NULL, "\r\n")) != NULL)
 	{
 		// Here, we're lookin at each IRC command in the buffer. There will be 
 		// no "\r\n" at the end of those, as strtok returns string without the
@@ -426,7 +431,7 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 		// TODO: remove the processed tokens from the buffer!
 	}
 
-	//fprintf(stderr, "IRC cmd buffer (%d): \n%s\n", strlen(state->buffer), state->buffer);
+	fprintf(stderr, "IRC cmd buffer (%d): \n%s\n", strlen(state->buffer), state->buffer);
 }
 
 /*
