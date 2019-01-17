@@ -413,8 +413,8 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 
 	// TODO even bigger issue: the delimiter handed to strtok is not being treated
 	// as string (one delimiter), but instead as chars (multiple one-char delims),
-	// so it will split on every '\', on every 'r', etc... although... now when I
-	// look at our output, then it really doesn't... I'm confused. Investigate!
+	// so it will split on either '\r' or '\n'... but wait, that should be okay!
+	// As long as we never see them individually... we should be good. Double-check.
 
 	char *token = NULL;
 	while ((token = strtok(token == NULL ? state->buffer : NULL, "\r\n")) != NULL)
