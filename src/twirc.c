@@ -298,13 +298,15 @@ int read_token(char *buf, size_t len)
 /*
  * Copies a portion of src to dest. The copied part will start from the offset given
  * in off and end at the next null terminator encountered, but at most slen bytes. 
+ * It is essential for slen to be correctly provided, as this function is supposed to
+ * handle src strings that were network-transmitted and might not be null-terminated.
  * The copied string will be null terminated, even if no null terminator was read from
  * src. If dlen is not sufficient to store the copied string plus the null terminator,
  * or if the given offset points to the end or beyond src, -1 is returned.
  * Returns the number of bytes copied + 1, so this value can be used as an offset for 
  * successive calls of this function, or slen if all chunks have been read. 
  */
-int shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
+size_t shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
 {
 	/*
 	 | recv() 1    | recv() 2       |
@@ -325,27 +327,37 @@ int shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t of
 	
 	// Determine the maximum number of bytes we'll have to read
 	size_t chunk_len = slen - off;
+	
 	// Invalid offset (or maybe we're just done reading src)
 	if (chunk_len <= 0)
 	{
 		return -1;
 	}
+	
 	// Figure out the maximum size we can read
 	size_t max_len = dlen < chunk_len ? dlen : chunk_len;
-	// Copy everything from offset to the next null terminator
+	
+	// Copy everything from offset to (and including) the next null terminator
+	// but at most max_len bytes (important if there is no null terminator)
 	strncpy(dest, src + off, max_len); // TODO can simplify by using stpncpy()
+	
 	// Check how much we've actually written to the dest buffer
 	size_t cpy_len = strnlen(dest, max_len);
+	
 	// Check if we've entirely filled the buffer (no space for \0)
 	if (cpy_len == dlen)
 	{
+		dest[0] = '\0';
 		return -1;
 	}
+	
 	// Make sure there is a null terminator at the end, even if
 	// there was no null terminator in the copied string
 	dest[cpy_len] = '\0';
-	// Calculate the offset to the next chunk (+1 to skill null terminator)
+	
+	// Calculate the offset to the next chunk (+1 to skip null terminator)
 	size_t new_off = off + cpy_len + 1;
+	
 	// If we've read all data, return slen, otherwise the offset to the next chunk
 	return new_off >= slen ? slen : new_off;
 }
@@ -355,6 +367,21 @@ int shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t of
  */
 int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_received)
 {
+	/*
+	    Remember that data can be split up in any possible way!
+
+	    +----------------------+----------------+
+	    |       recv() 1       |    recv() 2    |
+	    +----------------------+----------------+
+	    |USER MYNAME\r\n\0PASSW|ORD MYPASS\r\n\0|
+	    +----------------------+----------------+
+
+	    -> shift_chunk() 1.1 => "USER MYNAME\r\n\0"
+	    -> shift_chunk() 1.2 => "PASSW\0"
+
+	    -> shift_chunk() 2.1 => "ORD MYPASS\r\n\0"
+	*/
+
 	char chunk[TWIRC_BUFFER_SIZE];
 	chunk[0] = '\0';
 	int off = 0;
@@ -362,26 +389,28 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 
 	while ((off = shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
 	{
-		/*
-		if (chunk[strlen(chunk)-1] == '\n' && chunk[strlen(chunk)-2] == '\r')
+		// Concatenate the current buffer and the newly extracted chunk
+		strcat(state->buffer, chunk);
+
+		// Check the current length of the buffer
+		size_t buf_len = strlen(state->buffer);
+
+		// See if we have an IRC line break in the buffer
+		// TODO: There might be more than one! If the previous chunk contained
+		// part of a line break (say only '\r') and the next chunk contains both
+		// the rest of that line break ('\n') but also an additional, complete
+		// command with its own line break ('\r\n') following, then we now have
+		// two complete commands in the buffer! We need to account for that!
+		char *newline = strstr(state->buffer, "\r\n");
+		if (newline != NULL)
 		{
-			if (strlen(state->buffer) > 0)
-			{
-			*/
-				fprintf(stderr, "%d (%d): %s\n", ++lc, off, chunk);
-				continue;
-			/*
-			}
-			fprintf(stderr, "We need to concat that shit!\n");
+			// Replace "\r\n" with two null terminators
+			strcpy(newline, "\0\0");
+			fprintf(stderr, "> %s\n", state->buffer);
+			// Now remove the processed segment (until the \r\n) but leave everything
+			// after it in the buffer -- TODO
+			state->buffer[0] = '\0';
 		}
-		if (strlen(state->buffer) > 0)
-		{
-			fprintf(stderr, "We need to add this incompelte shit to what's already in the buffer!\n");
-			continue;
-		}
-		//strcpy(state->buffer, chunk);
-		fprintf(stderr, "We need to buffer that incomplete piece of shit!\n");
-		*/
 	}
 }
 
