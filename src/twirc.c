@@ -368,7 +368,7 @@ size_t shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t
  * Returns the size of the copied substring, or 0 if no complete command was found
  * in src.
  */
-size_t shift_cmd(char *dest, char *src)
+size_t shift_msg(char *dest, char *src)
 {
 	// Find the first occurence of a line break
 	char *crlf = strstr(src, "\r\n");
@@ -380,11 +380,11 @@ size_t shift_cmd(char *dest, char *src)
 	// Figure out the length of the first command
 	size_t src_len = strlen(src);
 	size_t end_len = strlen(crlf);
-	size_t cmd_len = src_len - end_len;
+	size_t msg_len = src_len - end_len;
 	
 	// Copy the command to the dest buffer
-	strncpy(dest, src, cmd_len);
-	dest[cmd_len] = '\0';
+	strncpy(dest, src, msg_len);
+	dest[msg_len] = '\0';
 
 	// Remove the copied part from src
 	memmove(src, crlf + 2, end_len - 2);
@@ -392,8 +392,16 @@ size_t shift_cmd(char *dest, char *src)
 	// Make sure src is null terminated again
 	src[end_len-2] = '\0';
 
-	return cmd_len;
+	return msg_len;
 }	
+
+// TODO
+// https://ircv3.net/specs/core/message-tags-3.2.html
+int twirc_process_msg(struct twirc_state *state, const char *msg)
+{
+	fprintf(stderr, "> %s (%d)\n", msg, strlen(msg));
+
+}
 
 /*
  * Process the received data, stored in buf, with a length of bytes_received.
@@ -423,11 +431,11 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 
 	// Here, we'll get one chunk at a time, where a chunk is a part of the
 	// recieved bytes that ends in a null terminator. We'll add all of the 
-	// extracted chunks to the buffer, which might might already contain
-	// parts of an incomplete IRC command. TODO we'll need to make sure that
-	// the buffer is sufficiently big to contain more than one 'delivery' in
-	// case one of them is incomplete, but the next one is (plus brings what 
-	// was missing of the first one).
+	// extracted chunks to the buffer, which might already contain parts of
+	// an incomplete IRC command. TODO we'll need to make sure that  the 
+	// buffer is sufficiently big to contain more than one 'delivery' in
+	// case one of them is incomplete, but the next one is (plus brings 
+	// what was missing of the first one).
 
 	while ((off = shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
 	{
@@ -435,27 +443,21 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 		strcat(state->buffer, chunk);
 	}
 
-	// Here, we're lookin at each IRC command in the buffer. We do so by getting 
-	// the string from the beginning of the buffer that ends in '\r\n', if any.
-	// This string will then be deleted from the buffer. We do this repeatedly 
-	// until we've extracted all complete commands from the buffer. If the last 
-	// bit of the buffer was an incomplete command (did not end in '\r\n'), it 
-	// will be left in the buffer. Hopefully, successive recv() calls will bring
-	// in the missing pieces. If not, we will run into issues...
+	// Here, we're lookin at each IRC command in the buffer. We do so by 
+	// getting the string from the beginning of the buffer that ends in 
+	// '\r\n', if any. This string will then be deleted from the buffer. 
+	// We do this repeatedly until we've extracted all complete commands 
+	// from the buffer. If the last bit of the buffer was an incomplete 
+	// command (did not end in '\r\n'), it will be left in the buffer. 
+	// Hopefully, successive recv() calls will bring in the missing 
+	// pieces. If not, we will run into issues...
 	
-	char cmd[1024];
-	while (shift_cmd(cmd, state->buffer) > 0)
+	char msg[1024];
+	while (shift_msg(msg, state->buffer) > 0)
 	{
-		fprintf(stderr, "> %s (%d)\n", cmd, strlen(cmd));
+		twirc_process_msg(state, msg);
 	}
 }
-
-/*
- * REMOVE WHITESPACE FROM THE END OF THIS STUHURINGU
- *
- * while ((len = strlen(chunk)) > 0 && isspace(chunk[len-1])) chunk[len-1]='\0'
- *
- */
 
 /*
  * main
