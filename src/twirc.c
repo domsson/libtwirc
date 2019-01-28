@@ -536,17 +536,20 @@ int main(void)
 			perror("epoll_wait encountered an error");
 		}
 
+		if (num_events == 0)
+		{
+			continue;
+		}
+
 		if (epev.events & EPOLLIN)
 		{
 			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
 			fprintf(stderr, "*socket ready for reading*\n");
-			char buf[1024];
+			char buf[4096];
 			int bytes_received = 0;
-			while ((bytes_received = twirc_recv(state, buf, 1024)) > 0)
+			while ((bytes_received = twirc_recv(state, buf, 4096)) > 0)
 			{
 				twirc_process_data(state, buf, bytes_received);
-				//tmp_dump_lines(buf, bytes_received);
-
 			}
 			if (!joined)
 			{
@@ -565,6 +568,7 @@ int main(void)
 		if (epev.events & EPOLLOUT)
 		{
 			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
+			fprintf(stderr, "*socket ready for writing*\n");
 			if (state->status == TWIRC_STATUS_CONNECTING)
 			{
 				int connection_status = stcpnb_status(state->socket_fd);
