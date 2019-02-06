@@ -35,6 +35,16 @@ struct twirc_state
 	int ip_type;
 	int socket_fd;
 	char *buffer;
+	struct twirc_events *events;
+};
+
+typedef void (*twirc_event)(struct twirc_state *s, char *msg);
+
+struct twirc_events
+{
+	twirc_event connect;
+	twirc_event message;
+	twirc_event join;
 };
 
 /*
@@ -222,6 +232,7 @@ struct twirc_state* twirc_init()
 	state->socket_fd = -1;
 	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
+	state->events = NULL;
 
 	// Create socket
 	state->socket_fd = stcpnb_create(state->ip_type);
@@ -241,6 +252,7 @@ struct twirc_state* twirc_init()
 int twirc_free(struct twirc_state *state)
 {
 	free(state->buffer);
+	free(state->events);
 	free(state);
 	return 0;
 }
@@ -256,14 +268,6 @@ int twirc_kill(struct twirc_state *state)
 	}
 	twirc_free(state);
 	return 0; 
-}
-
-/*
- * TODO
- */
-int twirc_loop(struct twirc_state *state)
-{
-	return 0;	
 }
 
 /*
@@ -460,6 +464,20 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 }
 
 /*
+ * TODO
+ */
+int twirc_loop(struct twirc_state *state)
+{
+
+	return 0;	
+}
+
+void handle_connect(struct twirc_state *state, char *msg)
+{
+	fprintf(stderr, "handle_connect()\n");
+};
+
+/*
  * main
  */
 int main(void)
@@ -474,8 +492,13 @@ int main(void)
 		return EXIT_FAILURE;
 	}
 
-	fprintf(stderr, "Successfully initialized twirc state...\n");
+	struct twirc_events e;
+	memset(&e, 0, sizeof(e));	
+	e.connect = handle_connect;
+	s->events = &e;
 
+	fprintf(stderr, "Successfully initialized twirc state...\n");
+	
 	char token[128];
 	int token_success = read_token(token, 128);
 	if (token_success == 0)
@@ -576,6 +599,7 @@ int main(void)
 				{
 					fprintf(stderr, "Looks like we're connected!\n");
 					state->status = TWIRC_STATUS_CONNECTED;
+					state->events->connect(state, "hello callback function");
 				}
 				if (connection_status == -1)
 				{
