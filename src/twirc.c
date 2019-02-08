@@ -33,12 +33,22 @@ struct twirc_state
 {
 	int status;			// connection status
 	int running;			// are we running in a loop?
+	int auth;			// are we authenticated? TODO: temporary! solve via status!
 	int ip_type;			// ip type, ipv4 or ipv6
 	int socket_fd;			// tcp socket file descriptor
 	char *buffer;			// irc message buffer
+	struct twirc_login *login;      // irc login data 
 	struct twirc_events *events;	// event callbacks
 	int epfd;			// epoll file descriptor
 	struct epoll_event epev;	// epoll event struct
+};
+
+struct twirc_login
+{
+	char *host;
+	char *port;
+	char *nick;
+	char *pass;
 };
 
 typedef void (*twirc_event)(struct twirc_state *s, char *msg);
@@ -62,16 +72,6 @@ struct twirc_events
 };
 
 /*
-struct twirc_creds
-{
-	char *host;
-	unsigned short port;
-	char *nick;
-	char *pass;
-};
-*/
-
-/*
  * Initiates a connection with the given server.
  * Returns  0 if connection is in progress
  * Returns -1 if connection attempt failed (check errno!)
@@ -79,7 +79,7 @@ struct twirc_creds
  * TODO need more return values because epoll initalization is now in here
  *      or maybe handle errors in an entirely different way, I don't know
  */
-int twirc_connect(struct twirc_state *state, const char *host, const char *port)
+int twirc_connect(struct twirc_state *state, const char *host, const char *port, const char *pass, const char *nick)
 {
 	// Create socket
 	state->socket_fd = stcpnb_create(state->ip_type);
@@ -116,7 +116,14 @@ int twirc_connect(struct twirc_state *state, const char *host, const char *port)
 	size_t n = 0;
 	socklen_t m = sizeof(n);
 	getsockopt(state->socket_fd, SOL_SOCKET, SO_RCVBUF, (void *)&n, &m);
-	fprintf(stderr, "recv() wants a buffer of size %d bytes\n", n);
+	fprintf(stderr, "recv() wants a buffer of size %zu bytes\n", n);
+
+	// Properly initialize the login struct and copy the login data into it
+	//state->login = malloc(sizeof(struct twirc_login));
+	state->login->host = strdup(host);
+	state->login->port = strdup(port);
+	state->login->nick = strdup(nick);
+	state->login->pass = strdup(pass);
 
 	// Connect the socket
 	int con = stcpnb_connect(state->socket_fd, state->ip_type, host, port);
@@ -154,7 +161,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
 
 	if (strncmp(msg, "PASS", 4) != 0)
 	{
-		fprintf(stderr, "twirc_send (%d): %s\n", strlen(buf), buf);
+		fprintf(stderr, "twirc_send (%zu): %s\n", strlen(buf), buf);
 	}
 
 	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
@@ -331,12 +338,14 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 
 	// Set some defaults / initial values
 	state->status = TWIRC_STATUS_DISCONNECTED;
+	state->auth = 0; // TODO TEMP, remove once solved properly
 	state->ip_type = TWIRC_IPV4;
 	state->socket_fd = -1;
 	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
-	state->events = events;
-
+	state->login = malloc(sizeof(struct twirc_login));
+	memcpy (&state->events, &events, sizeof(struct twirc_events));
+	//state->events = events;
 
 	// All worked out
 	return state;
@@ -358,14 +367,29 @@ int twirc_free_callbacks(struct twirc_state *state)
 	return 0;
 }
 
+int twirc_free_login(struct twirc_state *state)
+{
+	free(state->login->host);
+	free(state->login->port);
+	free(state->login->nick);
+	free(state->login->pass);
+	free(state->login);
+	state->login = NULL;
+	return 0;
+}
+
 /*
  * Frees the twirc_state and all of its members.
  */
 int twirc_free(struct twirc_state *state)
 {
 	twirc_free_callbacks(state);
-	free(state->buffer);
-	free(state->events);
+	//twirc_free_login(state);
+	if (state != NULL)
+	{
+		free(state->buffer);
+		free(state->events);
+	}
 	free(state);
 	state = NULL;
 	return 0;
@@ -518,8 +542,8 @@ size_t shift_msg(char *dest, char *src)
 // https://ircv3.net/specs/core/message-tags-3.2.html
 int twirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "> %s (%d)\n", msg, strlen(msg));
-
+	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	return 0; // TODO
 }
 
 /*
@@ -545,8 +569,6 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	char chunk[1024];
 	chunk[0] = '\0';
 	int off = 0;
-	int lc = 0;
-	
 
 	// Here, we'll get one chunk at a time, where a chunk is a part of the
 	// recieved bytes that ends in a null terminator. We'll add all of the 
@@ -576,11 +598,80 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	{
 		twirc_process_msg(state, msg);
 	}
+	return 0; // TODO
 }
 
-int twirc_tick(struct twirc_state *state)
+int twirc_tick(struct twirc_state *s, int seconds)
 {
+	int num_events = epoll_wait(s->epfd, &(s->epev), 1, seconds * 1000);
 
+	if (num_events == -1)
+	{
+		fprintf(stderr, "epoll_wait encountered an error\n");
+		s->running = 0;
+		return -1;
+	}
+	if (num_events == 0)
+	{
+		return 0;
+	}
+	if (s->epev.events & EPOLLIN)
+	{
+		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
+		fprintf(stderr, "*socket ready for reading*\n");
+		char buf[4096];
+		int bytes_received = 0;
+		while ((bytes_received = twirc_recv(state, buf, 4096)) > 0)
+		{
+			twirc_process_data(state, buf, bytes_received);
+		}
+	}
+	if (s->epev.events & EPOLLOUT)
+	{
+		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
+		fprintf(stderr, "*socket ready for writing*\n");
+		if (state->status == TWIRC_STATUS_CONNECTING)
+		{
+			int connection_status = stcpnb_status(state->socket_fd);
+			if (connection_status == 0)
+			{
+				fprintf(stderr, "Looks like we're connected!\n");
+				state->status = TWIRC_STATUS_CONNECTED;
+				state->events->connect(state, "hello callback function");
+			}
+			if (connection_status == -1)
+			{
+				fprintf(stderr, "Socket not ready (yet)\n");
+			}
+			if (connection_status == -2)
+			{
+				fprintf(stderr, "Could not get socket status\n");
+			}
+			if (s->auth == 0)
+			{
+				fprintf(stderr, "Authenticating...\n");
+				twirc_auth(state, s->login->nick, s->login->pass);
+				s->auth = 1;
+			}
+		}
+	}
+	if (s->epev.events & EPOLLRDHUP)
+	{
+		fprintf(stderr, "EPOLLRDHUP (peer closed socket connection)\n");
+		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
+		state->status = TWIRC_STATUS_DISCONNECTED;
+		s->running = 0;
+		return -1;
+	}
+	if (s->epev.events & EPOLLHUP) // will fire, even if not added explicitly
+	{
+		fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
+		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
+		state->status = TWIRC_STATUS_DISCONNECTED;
+		s->running = 0;
+		return -1;
+	}
+	return 0;
 }
 
 /*
@@ -630,7 +721,7 @@ int main(void)
 	}
 
 	// CONNECT TO THE IRC SERVER
-	if (twirc_connect(s, "irc.chat.twitch.tv", "6667") != 0)
+	if (twirc_connect(s, "irc.chat.twitch.tv", "6667", token, "kaulmate") != 0)
 	{
 		fprintf(stderr, "Could not connect socket\n");
 		return EXIT_FAILURE;
@@ -642,15 +733,15 @@ int main(void)
 	}
 
 	// MAIN LOOP
-	struct epoll_event epev;
-
-	int running = 1;
-	int auth = 0;
-	int joined = 0;
-	int hello = 0;
-	while (running)
+	s->running = 1;
+	//int auth = 0;   // temp
+	//int joined = 0; // temp
+	//int hello = 0;  // temp
+	while (s->running)
 	{
-		int num_events = epoll_wait(s->epfd, &epev, 1, 1 * 1000);
+		twirc_tick(s, 1);
+		/*
+		int num_events = epoll_wait(s->epfd, &(s->epev), 1, 1 * 1000);
 
 		if (num_events == -1)
 		{
@@ -662,9 +753,9 @@ int main(void)
 			continue;
 		}
 
-		if (epev.events & EPOLLIN)
+		if (s->epev.events & EPOLLIN)
 		{
-			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
+			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 			fprintf(stderr, "*socket ready for reading*\n");
 			char buf[4096];
 			int bytes_received = 0;
@@ -684,9 +775,9 @@ int main(void)
 			}
 		}
 
-		if (epev.events & EPOLLOUT)
+		if (s->epev.events & EPOLLOUT)
 		{
-			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
+			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 			fprintf(stderr, "*socket ready for writing*\n");
 			if (state->status == TWIRC_STATUS_CONNECTING)
 			{
@@ -715,21 +806,22 @@ int main(void)
 			}
 		}
 
-		if (epev.events & EPOLLRDHUP)
+		if (s->epev.events & EPOLLRDHUP)
 		{
 			fprintf(stderr, "EPOLLRDHUP (peer closed socket connection)\n");
-			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
+			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 			state->status = TWIRC_STATUS_DISCONNECTED;
-			running = 0;
+			s->running = 0;
 		}
 
-		if (epev.events & EPOLLHUP) // will fire, even if not added explicitly
+		if (s->epev.events & EPOLLHUP) // will fire, even if not added explicitly
 		{
 			fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
-			struct twirc_state *state = ((struct twirc_state*) epev.data.ptr);
+			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 			state->status = TWIRC_STATUS_DISCONNECTED;
-			running = 0;
+			s->running = 0;
 		}
+		*/
 
 	}
 
