@@ -32,6 +32,7 @@
 struct twirc_state
 {
 	int status;			// connection status
+	int running;			// are we running in a loop?
 	int ip_type;			// ip type, ipv4 or ipv6
 	int socket_fd;			// tcp socket file descriptor
 	char *buffer;			// irc message buffer
@@ -75,9 +76,49 @@ struct twirc_creds
  * Returns  0 if connection is in progress
  * Returns -1 if connection attempt failed (check errno!)
  * Returns -2 if host/port could not be resolved to IP
+ * TODO need more return values because epoll initalization is now in here
+ *      or maybe handle errors in an entirely different way, I don't know
  */
 int twirc_connect(struct twirc_state *state, const char *host, const char *port)
 {
+	// Create socket
+	state->socket_fd = stcpnb_create(state->ip_type);
+	if (state->socket_fd < 0)
+	{
+		// Socket could not be created
+		return -3;
+	}
+
+	// Create epoll instance 
+	state->epfd = epoll_create(1);
+	if (state->epfd < 0)
+	{
+		// Could not create epoll instance / file descriptor
+		return -4;
+	}
+
+	// Set up the epoll instance
+	struct epoll_event eev = { 0 };
+	eev.data.ptr = state;
+	eev.events = EPOLLRDHUP | EPOLLOUT | EPOLLIN | EPOLLET;
+	int epctl_result = epoll_ctl(state->epfd, EPOLL_CTL_ADD, state->socket_fd, &eev);
+	
+	if (epctl_result)
+	{
+		// Socket could not be registered for IO
+		return -5;
+	}
+
+	// fprintf(stderr, "Socket registered for IO...\n");
+
+	// Check the required buffer size for recv() as reported by getsockopt()
+	// TODO take this out later
+	size_t n = 0;
+	socklen_t m = sizeof(n);
+	getsockopt(state->socket_fd, SOL_SOCKET, SO_RCVBUF, (void *)&n, &m);
+	fprintf(stderr, "recv() wants a buffer of size %d bytes\n", n);
+
+	// Connect the socket
 	int con = stcpnb_connect(state->socket_fd, state->ip_type, host, port);
 	if (con == 0)
 	{
@@ -180,6 +221,9 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 	return res_len;
 }
 
+/*
+ * TODO: Check if pass begins with "oauth:" and prefix it otherwise.
+ */
 int twirc_cmd_pass(struct twirc_state *state, const char *pass)
 {
 	char msg[TWIRC_BUFFER_SIZE];
@@ -212,6 +256,36 @@ int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 		return -1;
 	}
 	return 0;
+}
+
+/*
+ * TODO: Check if chan begins with "#" and prefix it otherwise.
+ */
+int twirc_cmd_join(struct twirc_state *state, const char *chan)
+{
+	char msg[TWIRC_BUFFER_SIZE];
+	snprintf(msg, TWIRC_BUFFER_SIZE, "JOIN %s", chan);
+	return twirc_send(state, msg);
+}
+
+/*
+ * TODO: Check if chan begins with "#" and prefix it otherwise.
+ */
+int twirc_cmd_part(struct twirc_state *state, const char *chan)
+{
+	char msg[TWIRC_BUFFER_SIZE];
+	snprintf(msg, TWIRC_BUFFER_SIZE, "PART %s", chan);
+	return twirc_send(state, msg);
+}
+
+/*
+ * TODO: Check if chan begins with "#" and prefix it otherwise.
+ */
+int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *message)
+{
+	char msg[TWIRC_BUFFER_SIZE];
+	snprintf(msg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :%s", chan, message);
+	return twirc_send(state, msg);
 }
 
 /*
@@ -249,7 +323,7 @@ int twirc_disconnect(struct twirc_state *state)
  * Returns a pointer to an initialized twirc_state struct
  * or NULL if the attempt to create a socket failed.
  */
-struct twirc_state* twirc_init()
+struct twirc_state* twirc_init(struct twirc_events *events)
 {
 	// Init state struct
 	struct twirc_state *state = malloc(sizeof(struct twirc_state));
@@ -261,17 +335,10 @@ struct twirc_state* twirc_init()
 	state->socket_fd = -1;
 	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
-	state->events = NULL;
+	state->events = events;
 
-	// Create socket
-	state->socket_fd = stcpnb_create(state->ip_type);
-	if (state->socket_fd < 0)
-	{
-		// Socket could not be created
-		return NULL;
-	}
 
-	// All worked out, let's set the appropriate fields
+	// All worked out
 	return state;
 }
 
@@ -313,6 +380,7 @@ int twirc_kill(struct twirc_state *state)
 	{
 		twirc_disconnect(state);
 	}
+	close(state->epfd);
 	twirc_free(state);
 	return 0; 
 }
@@ -534,22 +602,25 @@ void handle_connect(struct twirc_state *state, char *msg)
  */
 int main(void)
 {
+	// HELLO WORLD
 	fprintf(stderr, "Starting up %s version %o.%o build %f\n",
 		TWIRC_NAME, TWIRC_VER_MAJOR, TWIRC_VER_MINOR, TWIRC_VER_BUILD);
 
-	struct twirc_state *s = twirc_init();
+	// SET UP CALLBACKS
+	struct twirc_events e = { 0 };
+	e.connect = handle_connect;
+
+	// CREATE TWIRC INSTANCE
+	struct twirc_state *s = twirc_init(&e);
 	if (s == NULL)
 	{
 		fprintf(stderr, "Could not init twirc state\n");
 		return EXIT_FAILURE;
 	}
 
-	struct twirc_events e = { 0 };
-	e.connect = handle_connect;
-	s->events = &e;
-
 	fprintf(stderr, "Successfully initialized twirc state...\n");
 	
+	// READ IN TOKEN FILE (TEMPORARY CODE)
 	char token[128];
 	int token_success = read_token(token, 128);
 	if (token_success == 0)
@@ -558,32 +629,7 @@ int main(void)
 		return EXIT_FAILURE;
 	}
 
-	int epfd = epoll_create(1);
-	if (epfd < 0)
-	{
-		perror("Could not create epoll file descriptor");
-		return EXIT_FAILURE;
-	}
-
-	struct epoll_event eev = { 0 };
-	eev.data.ptr = s;
-	eev.events = EPOLLRDHUP | EPOLLOUT | EPOLLIN | EPOLLET;
-	int epctl_result = epoll_ctl(epfd, EPOLL_CTL_ADD, s->socket_fd, &eev);
-	
-	if (epctl_result)
-	{
-		perror("Socket could not be registered for IO");
-		return EXIT_FAILURE;
-	}
-
-	fprintf(stderr, "Socket registered for IO...\n");
-
-	size_t n = 0;
-	socklen_t m = sizeof(n);
-	getsockopt(s->socket_fd, SOL_SOCKET, SO_RCVBUF, (void *)&n, &m);
-	
-	fprintf(stderr, "recv() wants a buffer of size %d bytes\n", n);
-
+	// CONNECT TO THE IRC SERVER
 	if (twirc_connect(s, "irc.chat.twitch.tv", "6667") != 0)
 	{
 		fprintf(stderr, "Could not connect socket\n");
@@ -595,6 +641,7 @@ int main(void)
 		fprintf(stderr, "Connection initiated...\n");
 	}
 
+	// MAIN LOOP
 	struct epoll_event epev;
 
 	int running = 1;
@@ -603,7 +650,7 @@ int main(void)
 	int hello = 0;
 	while (running)
 	{
-		int num_events = epoll_wait(epfd, &epev, 1, 1 * 1000);
+		int num_events = epoll_wait(s->epfd, &epev, 1, 1 * 1000);
 
 		if (num_events == -1)
 		{
@@ -627,14 +674,12 @@ int main(void)
 			}
 			if (!joined)
 			{
-				char join[] = "JOIN #domsson";
-				twirc_send(s, join);
+				twirc_cmd_join(s, "#domsson");
 				joined = 1;
 			}
 			if (joined && !hello)
 			{
-				char world[] = "PRIVMSG #domsson :jobruce is the best!";
-				twirc_send(s, world);
+				twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
 				hello = 1;
 			}
 		}
@@ -691,7 +736,7 @@ int main(void)
 	twirc_kill(s);
 	fprintf(stderr, "Bye!\n");
 
-	close(epfd);
+	//close(epfd);
 	return EXIT_SUCCESS;
 }
 
