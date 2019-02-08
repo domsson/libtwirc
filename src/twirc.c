@@ -31,11 +31,13 @@
 
 struct twirc_state
 {
-	int status;
-	int ip_type;
-	int socket_fd;
-	char *buffer;
-	struct twirc_events *events;
+	int status;			// connection status
+	int ip_type;			// ip type, ipv4 or ipv6
+	int socket_fd;			// tcp socket file descriptor
+	char *buffer;			// irc message buffer
+	struct twirc_events *events;	// event callbacks
+	int epfd;			// epoll file descriptor
+	struct epoll_event epev;	// epoll event struct
 };
 
 typedef void (*twirc_event)(struct twirc_state *s, char *msg);
@@ -45,6 +47,17 @@ struct twirc_events
 	twirc_event connect;
 	twirc_event message;
 	twirc_event join;
+	twirc_event part;
+	twirc_event quit;
+	twirc_event nick;
+	twirc_event mode;
+	twirc_event umode;
+	twirc_event topic;
+	twirc_event kick;
+	twirc_event channel;
+	twirc_event privmsg;
+	twirc_event notice;
+	twirc_event unknown;
 };
 
 /*
@@ -167,6 +180,20 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 	return res_len;
 }
 
+int twirc_cmd_pass(struct twirc_state *state, const char *pass)
+{
+	char msg[TWIRC_BUFFER_SIZE];
+	snprintf(msg, TWIRC_BUFFER_SIZE, "PASS %s", pass);
+	return twirc_send(state, msg);
+}
+
+int twirc_cmd_nick(struct twirc_state *state, const char *nick)
+{
+	char msg[TWIRC_BUFFER_SIZE];
+	snprintf(msg, TWIRC_BUFFER_SIZE, "NICK %s", nick);
+	return twirc_send(state, msg);
+}
+
 /*
  * Authenticates with the Twitch Server using the NICK and PASS commands.
  * You are not automatically authenticated when this function returns,
@@ -176,21 +203,25 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
  */
 int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 {
-	char msg_pass[TWIRC_BUFFER_SIZE];
-	snprintf(msg_pass, TWIRC_BUFFER_SIZE, "PASS %s", pass);
-
-	char msg_nick[TWIRC_BUFFER_SIZE];
-	snprintf(msg_nick, TWIRC_BUFFER_SIZE, "NICK %s", nick);
-
-	if (twirc_send(state, msg_pass) == -1)
+	if (twirc_cmd_pass(state, pass) == -1)
 	{
 		return -1;
 	}
-	if (twirc_send(state, msg_nick) == -1)
+	if (twirc_cmd_nick(state, nick) == -1)
 	{
 		return -1;
 	}
 	return 0;
+}
+
+/*
+ * Sends the PONG command to the IRC server.
+ * Returns 0 on success, -1 otherwise.
+ * TODO: do we need to append " :tmi.twitch.tv"?
+ */
+int twirc_cmd_pong(struct twirc_state *state)
+{
+	return twirc_send(state, "PONG");
 }
 
 /*
@@ -199,9 +230,7 @@ int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
  */
 int twirc_cmd_quit(struct twirc_state *state)
 {
-	char msg[TWIRC_BUFFER_SIZE];
-	snprintf(msg, TWIRC_BUFFER_SIZE, "QUIT");
-	return twirc_send(state, msg);
+	return twirc_send(state, "QUIT");
 }
 
 /*
@@ -247,13 +276,31 @@ struct twirc_state* twirc_init()
 }
 
 /*
+ * Set the state's events member to the given pointer.
+ */
+void twirc_set_callbacks(struct twirc_state *state, struct twirc_events *events)
+{
+	state->events = events;
+}
+
+int twirc_free_callbacks(struct twirc_state *state)
+{
+	// TODO free all the members!
+	// free(state->events->...);
+	// state->events = NULL;
+	return 0;
+}
+
+/*
  * Frees the twirc_state and all of its members.
  */
 int twirc_free(struct twirc_state *state)
 {
+	twirc_free_callbacks(state);
 	free(state->buffer);
 	free(state->events);
 	free(state);
+	state = NULL;
 	return 0;
 }
 
@@ -463,6 +510,11 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	}
 }
 
+int twirc_tick(struct twirc_state *state)
+{
+
+}
+
 /*
  * TODO
  */
@@ -492,8 +544,7 @@ int main(void)
 		return EXIT_FAILURE;
 	}
 
-	struct twirc_events e;
-	memset(&e, 0, sizeof(e));	
+	struct twirc_events e = { 0 };
 	e.connect = handle_connect;
 	s->events = &e;
 
