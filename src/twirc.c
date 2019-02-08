@@ -29,6 +29,7 @@
 
 #define TWIRC_BUFFER_SIZE 64 * 1024
 
+// TODO should the contained structs all be pointers? all be value?
 struct twirc_state
 {
 	int status;			// connection status
@@ -51,7 +52,7 @@ struct twirc_login
 	char *pass;
 };
 
-typedef void (*twirc_event)(struct twirc_state *s, char *msg);
+typedef void (*twirc_event)(struct twirc_state *s, const char *msg);
 
 struct twirc_events
 {
@@ -159,6 +160,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	buf[msg_len+1] = '\n';
 	buf[msg_len+2] = '\0';
 
+	// TODO take this out later on
 	if (strncmp(msg, "PASS", 4) != 0)
 	{
 		fprintf(stderr, "twirc_send (%zu): %s\n", strlen(buf), buf);
@@ -344,8 +346,13 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
 	state->login = malloc(sizeof(struct twirc_login));
-	memcpy (&state->events, &events, sizeof(struct twirc_events));
-	//state->events = events;
+	// TODO IMPORTANT
+	// Something is not right with this:
+	// It will consistently add 6 garbage bytes at the beginning of state->buffer!
+	//memcpy(&state->events, &events, sizeof(struct twirc_events));
+	// But this has one issue: if `events` goes out of scope in the calling context,
+	// we'll have a pointer to garbage in state->events ... we need to COPY it!
+	state->events = events;
 
 	// All worked out
 	return state;
@@ -384,12 +391,9 @@ int twirc_free_login(struct twirc_state *state)
 int twirc_free(struct twirc_state *state)
 {
 	twirc_free_callbacks(state);
-	//twirc_free_login(state);
-	if (state != NULL)
-	{
-		free(state->buffer);
-		free(state->events);
-	}
+	twirc_free_login(state);
+	free(state->buffer);
+	free(state->events);
 	free(state);
 	state = NULL;
 	return 0;
@@ -542,7 +546,16 @@ size_t shift_msg(char *dest, char *src)
 // https://ircv3.net/specs/core/message-tags-3.2.html
 int twirc_process_msg(struct twirc_state *state, const char *msg)
 {
+	// ALL OF THIS IS TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
+	{
+		state->events->connect(state, msg);
+	}
+	if (strstr(msg, "tmi.twitch.tv JOIN #") != NULL)
+	{
+		state->events->join(state, msg);
+	}
 	return 0; // TODO
 }
 
@@ -594,6 +607,7 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	// pieces. If not, we will run into issues...
 	
 	char msg[1024];
+	msg[0] = '\0';
 	while (shift_msg(msg, state->buffer) > 0)
 	{
 		twirc_process_msg(state, msg);
@@ -601,9 +615,9 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	return 0; // TODO
 }
 
-int twirc_tick(struct twirc_state *s, int seconds)
+int twirc_tick(struct twirc_state *s, int timeout)
 {
-	int num_events = epoll_wait(s->epfd, &(s->epev), 1, seconds * 1000);
+	int num_events = epoll_wait(s->epfd, &(s->epev), 1, timeout);
 
 	if (num_events == -1)
 	{
@@ -619,9 +633,9 @@ int twirc_tick(struct twirc_state *s, int seconds)
 	{
 		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 		fprintf(stderr, "*socket ready for reading*\n");
-		char buf[4096];
+		char buf[TWIRC_BUFFER_SIZE];
 		int bytes_received = 0;
-		while ((bytes_received = twirc_recv(state, buf, 4096)) > 0)
+		while ((bytes_received = twirc_recv(state, buf, TWIRC_BUFFER_SIZE)) > 0)
 		{
 			twirc_process_data(state, buf, bytes_received);
 		}
@@ -637,7 +651,6 @@ int twirc_tick(struct twirc_state *s, int seconds)
 			{
 				fprintf(stderr, "Looks like we're connected!\n");
 				state->status = TWIRC_STATUS_CONNECTED;
-				state->events->connect(state, "hello callback function");
 			}
 			if (connection_status == -1)
 			{
@@ -679,14 +692,35 @@ int twirc_tick(struct twirc_state *s, int seconds)
  */
 int twirc_loop(struct twirc_state *state)
 {
-
+	state->running = 1;
+	while (state->running)
+	{
+		// 1000 = timeout in milliseconds
+		twirc_tick(state, 1000);
+	}
 	return 0;	
 }
 
-void handle_connect(struct twirc_state *state, char *msg)
+/*
+ * TODO: TEMP
+ */
+void handle_connect(struct twirc_state *state, const char *msg)
 {
 	fprintf(stderr, "handle_connect()\n");
-};
+	twirc_cmd_join(state, "#domsson");
+}
+
+/*
+ * TODO: TEMP
+ */
+void handle_join(struct twirc_state *state, const char *msg)
+{
+	fprintf(stderr, "handle_join()\n");
+	if (strstr(msg, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") != NULL)
+	{
+		twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
+	}
+}
 
 /*
  * main
@@ -700,6 +734,7 @@ int main(void)
 	// SET UP CALLBACKS
 	struct twirc_events e = { 0 };
 	e.connect = handle_connect;
+	e.join = handle_join;
 
 	// CREATE TWIRC INSTANCE
 	struct twirc_state *s = twirc_init(&e);
@@ -733,102 +768,11 @@ int main(void)
 	}
 
 	// MAIN LOOP
-	s->running = 1;
-	//int auth = 0;   // temp
-	//int joined = 0; // temp
-	//int hello = 0;  // temp
-	while (s->running)
-	{
-		twirc_tick(s, 1);
-		/*
-		int num_events = epoll_wait(s->epfd, &(s->epev), 1, 1 * 1000);
-
-		if (num_events == -1)
-		{
-			perror("epoll_wait encountered an error");
-		}
-
-		if (num_events == 0)
-		{
-			continue;
-		}
-
-		if (s->epev.events & EPOLLIN)
-		{
-			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
-			fprintf(stderr, "*socket ready for reading*\n");
-			char buf[4096];
-			int bytes_received = 0;
-			while ((bytes_received = twirc_recv(state, buf, 4096)) > 0)
-			{
-				twirc_process_data(state, buf, bytes_received);
-			}
-			if (!joined)
-			{
-				twirc_cmd_join(s, "#domsson");
-				joined = 1;
-			}
-			if (joined && !hello)
-			{
-				twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
-				hello = 1;
-			}
-		}
-
-		if (s->epev.events & EPOLLOUT)
-		{
-			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
-			fprintf(stderr, "*socket ready for writing*\n");
-			if (state->status == TWIRC_STATUS_CONNECTING)
-			{
-				int connection_status = stcpnb_status(state->socket_fd);
-				if (connection_status == 0)
-				{
-					fprintf(stderr, "Looks like we're connected!\n");
-					state->status = TWIRC_STATUS_CONNECTED;
-					state->events->connect(state, "hello callback function");
-				}
-				if (connection_status == -1)
-				{
-					fprintf(stderr, "Socket not ready (yet)\n");
-
-				}
-				if (connection_status == -2)
-				{
-					fprintf(stderr, "Could not get socket status\n");
-				}
-				if (auth == 0)
-				{
-					fprintf(stderr, "Authenticating...\n");
-					twirc_auth(state, "kaulmate", token);
-					auth = 1;
-				}
-			}
-		}
-
-		if (s->epev.events & EPOLLRDHUP)
-		{
-			fprintf(stderr, "EPOLLRDHUP (peer closed socket connection)\n");
-			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
-			state->status = TWIRC_STATUS_DISCONNECTED;
-			s->running = 0;
-		}
-
-		if (s->epev.events & EPOLLHUP) // will fire, even if not added explicitly
-		{
-			fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
-			struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
-			state->status = TWIRC_STATUS_DISCONNECTED;
-			s->running = 0;
-		}
-		*/
-
-	}
+	twirc_loop(s);
 
 	twirc_kill(s);
 	fprintf(stderr, "Bye!\n");
 
-	//close(epfd);
 	return EXIT_SUCCESS;
 }
 
