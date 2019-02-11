@@ -23,26 +23,15 @@
 #define TWIRC_IPV4 AF_INET
 #define TWIRC_IPV6 AF_INET6
 
-#define TWIRC_STATUS_DISCONNECTED 0
-#define TWIRC_STATUS_CONNECTING   1
-#define TWIRC_STATUS_CONNECTED    2
+#define TWIRC_STATUS_DISCONNECTED   0
+#define TWIRC_STATUS_CONNECTING     1
+#define TWIRC_STATUS_CONNECTED      2
+#define TWIRC_STATUS_AUTHENTICATING 4
+#define TWIRC_STATUS_AUTHENTICATED  8
 
 #define TWIRC_BUFFER_SIZE 64 * 1024
 
-// TODO should the contained structs all be pointers? all be value?
-struct twirc_state
-{
-	int status;			// connection status
-	int running;			// are we running in a loop?
-	int auth;			// are we authenticated? TODO: temporary! solve via status!
-	int ip_type;			// ip type, ipv4 or ipv6
-	int socket_fd;			// tcp socket file descriptor
-	char *buffer;			// irc message buffer
-	struct twirc_login *login;      // irc login data 
-	struct twirc_events *events;	// event callbacks
-	int epfd;			// epoll file descriptor
-	struct epoll_event epev;	// epoll event struct
-};
+struct twirc_state; // forward declaration
 
 struct twirc_login
 {
@@ -70,6 +59,20 @@ struct twirc_events
 	twirc_event privmsg;
 	twirc_event notice;
 	twirc_event unknown;
+};
+
+struct twirc_state
+{
+	int status;                     // connection status
+	int running;                    // are we running in a loop?
+	int auth;                       // are we authenticated? TODO: temporary! solve via status!
+	int ip_type;                    // ip type, ipv4 or ipv6
+	int socket_fd;                  // tcp socket file descriptor
+	char *buffer;                   // irc message buffer
+	struct twirc_login login;       // irc login data 
+	struct twirc_events events;     // event callbacks
+	int epfd;                       // epoll file descriptor
+	struct epoll_event epev;        // epoll event struct
 };
 
 /*
@@ -120,11 +123,10 @@ int twirc_connect(struct twirc_state *state, const char *host, const char *port,
 	fprintf(stderr, "recv() wants a buffer of size %zu bytes\n", n);
 
 	// Properly initialize the login struct and copy the login data into it
-	//state->login = malloc(sizeof(struct twirc_login));
-	state->login->host = strdup(host);
-	state->login->port = strdup(port);
-	state->login->nick = strdup(nick);
-	state->login->pass = strdup(pass);
+	state->login.host = strdup(host);
+	state->login.port = strdup(port);
+	state->login.nick = strdup(nick);
+	state->login.pass = strdup(pass);
 
 	// Connect the socket
 	int con = stcpnb_connect(state->socket_fd, state->ip_type, host, port);
@@ -256,11 +258,11 @@ int twirc_cmd_nick(struct twirc_state *state, const char *nick)
  */
 int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
 {
-	if (twirc_cmd_pass(state, pass) == -1)
+	if (twirc_cmd_pass(state, state->login.pass) == -1)
 	{
 		return -1;
 	}
-	if (twirc_cmd_nick(state, nick) == -1)
+	if (twirc_cmd_nick(state, state->login.nick) == -1)
 	{
 		return -1;
 	}
@@ -329,8 +331,15 @@ int twirc_disconnect(struct twirc_state *state)
 }
 
 /*
- * Returns a pointer to an initialized twirc_state struct
- * or NULL if the attempt to create a socket failed.
+ * Set the state's events member to the given pointer.
+ */
+void twirc_set_callbacks(struct twirc_state *state, struct twirc_events *events)
+{
+	memcpy(&state->events, events, sizeof(struct twirc_events));
+}
+
+/*
+ * TODO comment
  */
 struct twirc_state* twirc_init(struct twirc_events *events)
 {
@@ -343,30 +352,21 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 	state->auth = 0; // TODO TEMP, remove once solved properly
 	state->ip_type = TWIRC_IPV4;
 	state->socket_fd = -1;
+	// Initialize the buffer
 	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
-	state->login = malloc(sizeof(struct twirc_login));
-	// TODO IMPORTANT
-	// Something is not right with this:
-	// It will consistently add 6 garbage bytes at the beginning of state->buffer!
-	//memcpy(&state->events, &events, sizeof(struct twirc_events));
-	// But this has one issue: if `events` goes out of scope in the calling context,
-	// we'll have a pointer to garbage in state->events ... we need to COPY it!
-	state->events = events;
+	// Make sure the structs within state are initialized to 0
+	memset(&state->login, 0, sizeof(struct twirc_login));
+	memset(&state->events, 0, sizeof(struct twirc_events));
+	// Copy the provided events 
+	//memcpy(&state->events, events, sizeof(struct twirc_events));
+	twirc_set_callbacks(state, events);
 
-	// All worked out
+	// All done
 	return state;
 }
 
-/*
- * Set the state's events member to the given pointer.
- */
-void twirc_set_callbacks(struct twirc_state *state, struct twirc_events *events)
-{
-	state->events = events;
-}
-
-int twirc_free_callbacks(struct twirc_state *state)
+int twirc_free_events(struct twirc_state *state)
 {
 	// TODO free all the members!
 	// free(state->events->...);
@@ -376,12 +376,10 @@ int twirc_free_callbacks(struct twirc_state *state)
 
 int twirc_free_login(struct twirc_state *state)
 {
-	free(state->login->host);
-	free(state->login->port);
-	free(state->login->nick);
-	free(state->login->pass);
-	free(state->login);
-	state->login = NULL;
+	free(state->login.host);
+	free(state->login.port);
+	free(state->login.nick);
+	free(state->login.pass);
 	return 0;
 }
 
@@ -390,10 +388,9 @@ int twirc_free_login(struct twirc_state *state)
  */
 int twirc_free(struct twirc_state *state)
 {
-	twirc_free_callbacks(state);
+	twirc_free_events(state);
 	twirc_free_login(state);
 	free(state->buffer);
-	free(state->events);
 	free(state);
 	state = NULL;
 	return 0;
@@ -550,11 +547,11 @@ int twirc_process_msg(struct twirc_state *state, const char *msg)
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
 	{
-		state->events->connect(state, msg);
+		state->events.connect(state, msg);
 	}
 	if (strstr(msg, "tmi.twitch.tv JOIN #") != NULL)
 	{
-		state->events->join(state, msg);
+		state->events.join(state, msg);
 	}
 	return 0; // TODO
 }
@@ -663,7 +660,8 @@ int twirc_tick(struct twirc_state *s, int timeout)
 			if (s->auth == 0)
 			{
 				fprintf(stderr, "Authenticating...\n");
-				twirc_auth(state, s->login->nick, s->login->pass);
+				//twirc_auth(state, s->login->nick, s->login->pass);
+				twirc_auth(state, s->login.nick, s->login.pass);
 				s->auth = 1;
 			}
 		}
