@@ -10,28 +10,7 @@
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include "stcpnb.c"
-
-#define TWIRC_NAME "twirc"
-#define TWIRC_VER_MAJOR 0
-#define TWIRC_VER_MINOR 1
-#ifdef BUILD
-	#define TWIRC_VER_BUILD BUILD
-#else
-	#define TWIRC_VER_BUILD 0.0
-#endif
-
-#define TWIRC_IPV4 AF_INET
-#define TWIRC_IPV6 AF_INET6
-
-#define TWIRC_STATUS_DISCONNECTED   0
-#define TWIRC_STATUS_CONNECTING     1
-#define TWIRC_STATUS_CONNECTED      2
-#define TWIRC_STATUS_AUTHENTICATING 4
-#define TWIRC_STATUS_AUTHENTICATED  8
-
-#define TWIRC_BUFFER_SIZE 64 * 1024
-
-struct twirc_state; // forward declaration
+#include "twirc.h"
 
 struct twirc_login
 {
@@ -250,26 +229,6 @@ int twirc_cmd_nick(struct twirc_state *state, const char *nick)
 }
 
 /*
- * Authenticates with the Twitch Server using the NICK and PASS commands.
- * You are not automatically authenticated when this function returns,
- * you need to wait for the server's reply (MOTD) first.
- * Returns 0 if both commands were send successfully, -1 on error.
- * TODO: See if we can't send both commands in one - what's better?
- */
-int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
-{
-	if (twirc_cmd_pass(state, state->login.pass) == -1)
-	{
-		return -1;
-	}
-	if (twirc_cmd_nick(state, state->login.nick) == -1)
-	{
-		return -1;
-	}
-	return 0;
-}
-
-/*
  * TODO: Check if chan begins with "#" and prefix it otherwise.
  */
 int twirc_cmd_join(struct twirc_state *state, const char *chan)
@@ -316,6 +275,26 @@ int twirc_cmd_pong(struct twirc_state *state)
 int twirc_cmd_quit(struct twirc_state *state)
 {
 	return twirc_send(state, "QUIT");
+}
+
+/*
+ * Authenticates with the Twitch Server using the NICK and PASS commands.
+ * You are not automatically authenticated when this function returns,
+ * you need to wait for the server's reply (MOTD) first.
+ * Returns 0 if both commands were send successfully, -1 on error.
+ * TODO: See if we can't send both commands in one - what's better?
+ */
+int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
+{
+	if (twirc_cmd_pass(state, state->login.pass) == -1)
+	{
+		return -1;
+	}
+	if (twirc_cmd_nick(state, state->login.nick) == -1)
+	{
+		return -1;
+	}
+	return 0;
 }
 
 /*
@@ -450,7 +429,7 @@ int read_token(char *buf, size_t len)
  * Returns the number of bytes copied + 1, so this value can be used as an offset for 
  * successive calls of this function, or slen if all chunks have been read. 
  */
-size_t shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
+size_t libtwirc_shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
 {
 	/*
 	 | recv() 1    | recv() 2       |
@@ -512,7 +491,7 @@ size_t shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t
  * Returns the size of the copied substring, or 0 if no complete command was found
  * in src.
  */
-size_t shift_msg(char *dest, char *src)
+size_t libtwirc_shift_msg(char *dest, char *src)
 {
 	// Find the first occurence of a line break
 	char *crlf = strstr(src, "\r\n");
@@ -541,7 +520,7 @@ size_t shift_msg(char *dest, char *src)
 
 // TODO
 // https://ircv3.net/specs/core/message-tags-3.2.html
-int twirc_process_msg(struct twirc_state *state, const char *msg)
+int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
 	// ALL OF THIS IS TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
@@ -562,7 +541,7 @@ int twirc_process_msg(struct twirc_state *state, const char *msg)
  * should be processed right away.
  * TODO
  */
-int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_received)
+int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_received)
 {
 	/*
 	    +----------------------+----------------+
@@ -588,7 +567,7 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	// case one of them is incomplete, but the next one is (plus brings 
 	// what was missing of the first one).
 
-	while ((off = shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
+	while ((off = libtwirc_shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
 	{
 		// Concatenate the current buffer and the newly extracted chunk
 		strcat(state->buffer, chunk);
@@ -605,9 +584,9 @@ int twirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_
 	
 	char msg[1024];
 	msg[0] = '\0';
-	while (shift_msg(msg, state->buffer) > 0)
+	while (libtwirc_shift_msg(msg, state->buffer) > 0)
 	{
-		twirc_process_msg(state, msg);
+		libtwirc_process_msg(state, msg);
 	}
 	return 0; // TODO
 }
@@ -634,7 +613,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		int bytes_received = 0;
 		while ((bytes_received = twirc_recv(state, buf, TWIRC_BUFFER_SIZE)) > 0)
 		{
-			twirc_process_data(state, buf, bytes_received);
+			libtwirc_process_data(state, buf, bytes_received);
 		}
 	}
 	if (s->epev.events & EPOLLOUT)
@@ -660,7 +639,6 @@ int twirc_tick(struct twirc_state *s, int timeout)
 			if (s->auth == 0)
 			{
 				fprintf(stderr, "Authenticating...\n");
-				//twirc_auth(state, s->login->nick, s->login->pass);
 				twirc_auth(state, s->login.nick, s->login.pass);
 				s->auth = 1;
 			}
@@ -721,6 +699,8 @@ void handle_join(struct twirc_state *state, const char *msg)
 }
 
 /*
+ * TODO: this will have to be removed for the first proper release
+ *       it is just temporary built-in test code for the lib
  * main
  */
 int main(void)
