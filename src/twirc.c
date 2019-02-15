@@ -13,50 +13,6 @@
 #include "twirc.h"
 
 /*
-struct twirc_login
-{
-	char *host;
-	char *port;
-	char *nick;
-	char *pass;
-};
-
-typedef void (*twirc_event)(struct twirc_state *s, const char *msg);
-
-struct twirc_events
-{
-	twirc_event connect;
-	twirc_event message;
-	twirc_event join;
-	twirc_event part;
-	twirc_event quit;
-	twirc_event nick;
-	twirc_event mode;
-	twirc_event umode;
-	twirc_event topic;
-	twirc_event kick;
-	twirc_event channel;
-	twirc_event privmsg;
-	twirc_event notice;
-	twirc_event unknown;
-};
-
-struct twirc_state
-{
-	int status;                     // connection status
-	int running;                    // are we running in a loop?
-	int auth;                       // are we authenticated? TODO: temporary! solve via status!
-	int ip_type;                    // ip type, ipv4 or ipv6
-	int socket_fd;                  // tcp socket file descriptor
-	char *buffer;                   // irc message buffer
-	struct twirc_login login;       // irc login data 
-	struct twirc_events events;     // event callbacks
-	int epfd;                       // epoll file descriptor
-	struct epoll_event epev;        // epoll event struct
-};
-*/
-
-/*
  * Initiates a connection with the given server.
  * Returns  0 if connection is in progress
  * Returns -1 if connection attempt failed (check errno!)
@@ -286,7 +242,7 @@ int twirc_cmd_quit(struct twirc_state *state)
  * Returns 0 if both commands were send successfully, -1 on error.
  * TODO: See if we can't send both commands in one - what's better?
  */
-int twirc_auth(struct twirc_state *state, const char *nick, const char *pass)
+int twirc_auth(struct twirc_state *state)
 {
 	if (twirc_cmd_pass(state, state->login.pass) == -1)
 	{
@@ -330,7 +286,6 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 
 	// Set some defaults / initial values
 	state->status = TWIRC_STATUS_DISCONNECTED;
-	state->auth = 0; // TODO TEMP, remove once solved properly
 	state->ip_type = TWIRC_IPV4;
 	state->socket_fd = -1;
 	// Initialize the buffer
@@ -390,36 +345,6 @@ int twirc_kill(struct twirc_state *state)
 	twirc_free(state);
 	return 0; 
 }
-
-/*
- * TMP: reads the oauth token for the bot from a file.
- * Obviously, this data will later be provided by the user.
- * Once we're done with the library, this function can and
- * should be deleted.
- *
-int read_token(char *buf, size_t len)
-{
-	FILE *fp;
-	fp = fopen ("token", "r");
-	if (fp == NULL)
-	{
-		return 0;
-	}
-	char *res = fgets(buf, len, fp);
-	if (res == NULL)
-	{
-		fclose(fp);
-		return 0;
-	}
-	size_t res_len = strlen(buf);
-	if (buf[res_len-1] == '\n')
-	{
-		buf[res_len-1] = '\0';
-	}
-	fclose (fp);
-	return 1;
-}
- */
 
 /*
  * Copies a portion of src to dest. The copied part will start from the offset given
@@ -596,70 +521,86 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t byt
 
 int twirc_tick(struct twirc_state *s, int timeout)
 {
+	// TODO do we need to account for multiple events?
+	// Seeing how we have a user-defined timeout, I would definitely think so!
+	// This means everything the whole event evaluation code has to be run in
+	// a loop, which runs num_events times until all events have been processed!
+	// It also means that we have to decide upon a max_events number (how?).
 	int num_events = epoll_wait(s->epfd, &(s->epev), 1, timeout);
 
+	// An error has occured
 	if (num_events == -1)
 	{
 		fprintf(stderr, "epoll_wait encountered an error\n");
 		s->running = 0;
 		return -1;
 	}
+	
+	// No events have occured
 	if (num_events == 0)
 	{
 		return 0;
 	}
+	
+	// We're ready to send data
 	if (s->epev.events & EPOLLIN)
 	{
-		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 		fprintf(stderr, "*socket ready for reading*\n");
 		char buf[TWIRC_BUFFER_SIZE];
 		int bytes_received = 0;
-		while ((bytes_received = twirc_recv(state, buf, TWIRC_BUFFER_SIZE)) > 0)
+		while ((bytes_received = twirc_recv(s, buf, TWIRC_BUFFER_SIZE)) > 0)
 		{
-			libtwirc_process_data(state, buf, bytes_received);
+			libtwirc_process_data(s, buf, bytes_received);
 		}
 	}
+	
+	// We've got data coming in
 	if (s->epev.events & EPOLLOUT)
 	{
-		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
 		fprintf(stderr, "*socket ready for writing*\n");
-		if (state->status == TWIRC_STATUS_CONNECTING)
+		if (s->status & TWIRC_STATUS_CONNECTING)
 		{
-			int connection_status = stcpnb_status(state->socket_fd);
-			if (connection_status == 0)
+			int conn_status = stcpnb_status(s->socket_fd);
+			if (conn_status == 0)
 			{
 				fprintf(stderr, "Looks like we're connected!\n");
-				state->status = TWIRC_STATUS_CONNECTED;
+				s->status = TWIRC_STATUS_CONNECTED;
 			}
-			if (connection_status == -1)
+			if (conn_status == -1)
 			{
 				fprintf(stderr, "Socket not ready (yet)\n");
 			}
-			if (connection_status == -2)
+			if (conn_status == -2)
 			{
 				fprintf(stderr, "Could not get socket status\n");
 			}
-			if (s->auth == 0)
+		}
+		if (s->status & TWIRC_STATUS_CONNECTED)
+		{
+			if ((s->status & TWIRC_STATUS_AUTHENTICATED) == 0)
 			{
 				fprintf(stderr, "Authenticating...\n");
-				twirc_auth(state, s->login.nick, s->login.pass);
-				s->auth = 1;
+				twirc_auth(s);
+				s->status = TWIRC_STATUS_AUTHENTICATING;
+
 			}
 		}
 	}
+	
+	// Server closed the connection
 	if (s->epev.events & EPOLLRDHUP)
 	{
 		fprintf(stderr, "EPOLLRDHUP (peer closed socket connection)\n");
-		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
-		state->status = TWIRC_STATUS_DISCONNECTED;
+		s->status = TWIRC_STATUS_DISCONNECTED;
 		s->running = 0;
 		return -1;
 	}
+	
+	// Connection has been lost
 	if (s->epev.events & EPOLLHUP) // will fire, even if not added explicitly
 	{
 		fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
-		struct twirc_state *state = ((struct twirc_state*) s->epev.data.ptr);
-		state->status = TWIRC_STATUS_DISCONNECTED;
+		s->status = TWIRC_STATUS_DISCONNECTED;
 		s->running = 0;
 		return -1;
 	}
@@ -669,91 +610,14 @@ int twirc_tick(struct twirc_state *s, int timeout)
 /*
  * TODO
  */
-int twirc_loop(struct twirc_state *state)
+int twirc_loop(struct twirc_state *state, int timeout)
 {
 	state->running = 1;
 	while (state->running)
 	{
-		// 1000 = timeout in milliseconds
-		twirc_tick(state, 1000);
+		// timeout is in milliseconds
+		twirc_tick(state, timeout);
 	}
-	return 0;	
+	return 0;
 }
 
-/*
- * TODO: TEMP
- *
-void handle_connect(struct twirc_state *state, const char *msg)
-{
-	fprintf(stderr, "handle_connect()\n");
-	twirc_cmd_join(state, "#domsson");
-}
-
- *
- * TODO: TEMP
- *
-void handle_join(struct twirc_state *state, const char *msg)
-{
-	fprintf(stderr, "handle_join()\n");
-	if (strstr(msg, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") != NULL)
-	{
-		twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
-	}
-}
-
- *
- * TODO: this will have to be removed for the first proper release
- *       it is just temporary built-in test code for the lib
- * main
- *
-int main(void)
-{
-	// HELLO WORLD
-	fprintf(stderr, "Starting up %s version %o.%o build %f\n",
-		TWIRC_NAME, TWIRC_VER_MAJOR, TWIRC_VER_MINOR, TWIRC_VER_BUILD);
-
-	// SET UP CALLBACKS
-	struct twirc_events e = { 0 };
-	e.connect = handle_connect;
-	e.join = handle_join;
-
-	// CREATE TWIRC INSTANCE
-	struct twirc_state *s = twirc_init(&e);
-	if (s == NULL)
-	{
-		fprintf(stderr, "Could not init twirc state\n");
-		return EXIT_FAILURE;
-	}
-
-	fprintf(stderr, "Successfully initialized twirc state...\n");
-	
-	// READ IN TOKEN FILE (TEMPORARY CODE)
-	char token[128];
-	int token_success = read_token(token, 128);
-	if (token_success == 0)
-	{
-		fprintf(stderr, "Could not read token file\n");
-		return EXIT_FAILURE;
-	}
-
-	// CONNECT TO THE IRC SERVER
-	if (twirc_connect(s, "irc.chat.twitch.tv", "6667", token, "kaulmate") != 0)
-	{
-		fprintf(stderr, "Could not connect socket\n");
-		return EXIT_FAILURE;
-	}
-
-	if (errno = EINPROGRESS)
-	{
-		fprintf(stderr, "Connection initiated...\n");
-	}
-
-	// MAIN LOOP
-	twirc_loop(s);
-
-	twirc_kill(s);
-	fprintf(stderr, "Bye!\n");
-
-	return EXIT_SUCCESS;
-}
- */

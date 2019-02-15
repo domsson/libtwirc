@@ -103,7 +103,7 @@ int main(void)
 	}
 
 	// MAIN LOOP
-	twirc_loop(s);
+	twirc_loop(s, 1000);
 
 	twirc_kill(s);
 	fprintf(stderr, "Bye!\n");

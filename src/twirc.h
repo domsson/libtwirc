@@ -57,7 +57,6 @@ struct twirc_state
 {
 	int status;                     // connection status
 	int running;                    // are we running in a loop?
-	int auth;                       // are we authenticated? TODO: temporary! solve via status!
 	int ip_type;                    // ip type, ipv4 or ipv6
 	int socket_fd;                  // tcp socket file descriptor
 	char *buffer;                   // irc message buffer
@@ -75,10 +74,10 @@ int twirc_connect(struct twirc_state *s, const char *host, const char *port, con
 int twirc_disconnect(struct twirc_state *s);
 int twirc_send(struct twirc_state *s, const char *msg);
 int twirc_recv(struct twirc_state *s, char *buf, size_t len);
-int twirc_auth(struct twirc_state *s, const char *nick, const char *pass);
+int twirc_auth(struct twirc_state *s);
 int twirc_kill(struct twirc_state *s);
 
-int twirc_loop(struct twirc_state *s);
+int twirc_loop(struct twirc_state *s, int timeout);
 int twirc_tick(struct twirc_state *s, int timeout);
 
 int twirc_cmd_pass(struct twirc_state *s, const char *pass);
