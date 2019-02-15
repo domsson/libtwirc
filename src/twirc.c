@@ -450,15 +450,30 @@ size_t libtwirc_shift_msg(char *dest, char *src)
 // https://ircv3.net/specs/core/message-tags-3.2.html
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	// ALL OF THIS IS TEMPORARY TEST CODE
+	// ALL OF THIS IS MOSTLY TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
 	{
-		state->events.connect(state, msg);
+		state->status |= TWIRC_STATUS_AUTHENTICATED;
+		if (state->events.welcome != NULL)
+		{
+			state->events.welcome(state, msg);
+		}
 	}
 	if (strstr(msg, "tmi.twitch.tv JOIN #") != NULL)
 	{
-		state->events.join(state, msg);
+		if (state->events.join != NULL)
+		{
+			state->events.join(state, msg);
+		}
+	}
+	if (strstr(msg, "PING :tmi.twitch.tv") != NULL)
+	{
+		twirc_send(state, "PONG :tmi.twitch.tv");
+		if (state->events.ping != NULL)
+		{
+			state->events.ping(state, msg);
+		}
 	}
 	return 0; // TODO
 }
@@ -565,6 +580,10 @@ int twirc_tick(struct twirc_state *s, int timeout)
 			{
 				fprintf(stderr, "Looks like we're connected!\n");
 				s->status = TWIRC_STATUS_CONNECTED;
+				if (s->events.connect != NULL)
+				{
+					s->events.connect(s, "");
+				}
 			}
 			if (conn_status == -1)
 			{
@@ -581,8 +600,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 			{
 				fprintf(stderr, "Authenticating...\n");
 				twirc_auth(s);
-				s->status = TWIRC_STATUS_AUTHENTICATING;
-
+				s->status |= TWIRC_STATUS_AUTHENTICATING;
 			}
 		}
 	}

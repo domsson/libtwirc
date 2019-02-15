@@ -6,10 +6,7 @@
 #include "twirc.h"
 
 /*
- * TMP: reads the oauth token for the bot from a file.
- * Obviously, this data will later be provided by the user.
- * Once we're done with the library, this function can and
- * should be deleted.
+ *
  */
 int read_token(char *buf, size_t len)
 {
@@ -35,7 +32,7 @@ int read_token(char *buf, size_t len)
 }
 
 /*
- * TODO: TEMP
+ *
  */
 void handle_connect(struct twirc_state *state, const char *msg)
 {
@@ -44,7 +41,7 @@ void handle_connect(struct twirc_state *state, const char *msg)
 }
 
 /*
- * TODO: TEMP
+ *
  */
 void handle_join(struct twirc_state *state, const char *msg)
 {
@@ -56,8 +53,6 @@ void handle_join(struct twirc_state *state, const char *msg)
 }
 
 /*
- * TODO: this will have to be removed for the first proper release
- *       it is just temporary built-in test code for the lib
  * main
  */
 int main(void)
@@ -81,7 +76,7 @@ int main(void)
 
 	fprintf(stderr, "Successfully initialized twirc state...\n");
 	
-	// READ IN TOKEN FILE (TEMPORARY CODE)
+	// READ IN TOKEN FILE
 	char token[128];
 	int token_success = read_token(token, 128);
 	if (token_success == 0)

@@ -38,7 +38,9 @@ typedef void (*twirc_event)(struct twirc_state *s, const char *msg);
 struct twirc_events
 {
 	twirc_event connect;
+	twirc_event welcome;
 	twirc_event message;
+	twirc_event ping;
 	twirc_event join;
 	twirc_event part;
 	twirc_event quit;
