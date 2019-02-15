@@ -3,7 +3,7 @@
 #include <errno.h>	// errno
 #include <netdb.h>	// getaddrinfo()
 #include <unistd.h>	// close(), fcntl()
-#include <string.h>	// strerror()
+#include <string.h>	// strlen(), strerror()
 #include <fcntl.h>	// fcntl()
 #include <ctype.h>	// isspace()
 #include <sys/types.h>	// ssize_t
@@ -12,6 +12,7 @@
 #include "stcpnb.c"
 #include "twirc.h"
 
+/*
 struct twirc_login
 {
 	char *host;
@@ -53,6 +54,7 @@ struct twirc_state
 	int epfd;                       // epoll file descriptor
 	struct epoll_event epev;        // epoll event struct
 };
+*/
 
 /*
  * Initiates a connection with the given server.
@@ -394,7 +396,7 @@ int twirc_kill(struct twirc_state *state)
  * Obviously, this data will later be provided by the user.
  * Once we're done with the library, this function can and
  * should be deleted.
- */
+ *
 int read_token(char *buf, size_t len)
 {
 	FILE *fp;
@@ -417,6 +419,7 @@ int read_token(char *buf, size_t len)
 	fclose (fp);
 	return 1;
 }
+ */
 
 /*
  * Copies a portion of src to dest. The copied part will start from the offset given
@@ -679,16 +682,16 @@ int twirc_loop(struct twirc_state *state)
 
 /*
  * TODO: TEMP
- */
+ *
 void handle_connect(struct twirc_state *state, const char *msg)
 {
 	fprintf(stderr, "handle_connect()\n");
 	twirc_cmd_join(state, "#domsson");
 }
 
-/*
+ *
  * TODO: TEMP
- */
+ *
 void handle_join(struct twirc_state *state, const char *msg)
 {
 	fprintf(stderr, "handle_join()\n");
@@ -698,11 +701,11 @@ void handle_join(struct twirc_state *state, const char *msg)
 	}
 }
 
-/*
+ *
  * TODO: this will have to be removed for the first proper release
  *       it is just temporary built-in test code for the lib
  * main
- */
+ *
 int main(void)
 {
 	// HELLO WORLD
@@ -753,4 +756,4 @@ int main(void)
 
 	return EXIT_SUCCESS;
 }
-
+ */

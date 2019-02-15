@@ -1,3 +1,5 @@
+#include <sys/epoll.h>    // struct epoll_event
+
 #ifndef LIBTWIRC_H
 #define LIBTWIRC_H
 
@@ -22,8 +24,49 @@
 #define TWIRC_BUFFER_SIZE 64 * 1024
 
 struct twirc_state;
-struct twirc_login;
-struct twirc_events;
+
+struct twirc_login
+{
+	char *host;
+	char *port;
+	char *nick;
+	char *pass;
+};
+
+typedef void (*twirc_event)(struct twirc_state *s, const char *msg);
+
+struct twirc_events
+{
+	twirc_event connect;
+	twirc_event message;
+	twirc_event join;
+	twirc_event part;
+	twirc_event quit;
+	twirc_event nick;
+	twirc_event mode;
+	twirc_event umode;
+	twirc_event topic;
+	twirc_event kick;
+	twirc_event channel;
+	twirc_event privmsg;
+	twirc_event notice;
+	twirc_event unknown;
+};
+
+struct twirc_state
+{
+	int status;                     // connection status
+	int running;                    // are we running in a loop?
+	int auth;                       // are we authenticated? TODO: temporary! solve via status!
+	int ip_type;                    // ip type, ipv4 or ipv6
+	int socket_fd;                  // tcp socket file descriptor
+	char *buffer;                   // irc message buffer
+	struct twirc_login login;       // irc login data 
+	struct twirc_events events;     // event callbacks
+	int epfd;                       // epoll file descriptor
+	struct epoll_event epev;        // epoll event struct
+};
+
 
 struct twirc_state* twirc_init(struct twirc_events *e);
 void twirc_set_callbacks(struct twirc_state *s, struct twirc_events *e);
