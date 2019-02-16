@@ -447,6 +447,41 @@ size_t libtwirc_shift_msg(char *dest, char *src)
 	return msg_len;
 }	
 
+/*
+ * Finds the first occurrence of the sep string in src, then copies everything 
+ * that is found before the separator into dest. The extracted part and the 
+ * separator will be removed from src.
+ * Returns the size of the copied string, or 0 if the separator could not be found
+ * in the src string.
+ */
+size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
+{
+	// Find the first occurence of the separator
+	char *sep_pos = strstr(src, sep);
+	if (sep_pos == NULL)
+	{
+		return 0;
+	}
+
+	// Figure out the length of the token
+	size_t sep_len = strlen(sep);
+	size_t src_len = strlen(src);
+	size_t end_len = strlen(sep_pos);
+	size_t tok_len = src_len - end_len;
+
+	// Copy the token to the dest buffer
+	strncpy(dest, src, tok_len);
+	dest[tok_len] = '\0';
+
+	// Remove the token from src
+	memmove(src, sep_pos + sep_len, end_len - sep_len); 
+
+	// Make sure src is null terminated again
+	src[end_len - sep_len] = '\0';
+
+	return tok_len;
+}
+
 void libtwirc_parse_tags(const char *msg)
 {
 	if (msg[0] != '@')
@@ -461,14 +496,17 @@ void libtwirc_parse_tags(const char *msg)
 
 void libtwirc_parse_prefix(const char *msg)
 {
+
 }
 
 void libtwirc_parse_command(const char *msg)
 {
+
 }
 
 void libtwirc_parse_params(const char *msg)
 {
+
 }
 
 // TODO
@@ -555,7 +593,8 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t dat
 	
 	char msg[2048];
 	msg[0] = '\0';
-	while (libtwirc_shift_msg(msg, state->buffer) > 0)
+	//while (libtwirc_shift_msg(msg, state->buffer) > 0)
+	while (libtwirc_shift_token(msg, state->buffer, "\r\n") > 0)
 	{
 		libtwirc_process_msg(state, msg);
 	}
