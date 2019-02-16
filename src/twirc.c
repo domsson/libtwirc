@@ -431,21 +431,20 @@ size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
 		return 0;
 	}
 
-	// Figure out the length of the token
+	// Figure out the length of the token etc
 	size_t sep_len = strlen(sep);
-	size_t src_len = strlen(src);
-	size_t end_len = strlen(sep_pos);
-	size_t tok_len = src_len - end_len;
-
+	size_t new_len = strlen(sep_pos) - sep_len;
+	size_t tok_len = sep_pos - src;
+	
 	// Copy the token to the dest buffer
 	strncpy(dest, src, tok_len);
 	dest[tok_len] = '\0';
 
 	// Remove the token from src
-	memmove(src, sep_pos + sep_len, end_len - sep_len); 
+	memmove(src, sep_pos + sep_len, new_len); 
 
 	// Make sure src is null terminated again
-	src[end_len - sep_len] = '\0';
+	src[new_len] = '\0';
 
 	return tok_len;
 }
@@ -475,6 +474,10 @@ char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 	return sep_pos + strlen(sep);
 }
 
+/*
+ * TODO
+ * https://ircv3.net/specs/core/message-tags-3.2.html
+ */
 char *libtwirc_parse_tags(const char *msg)
 {
 	if (msg[0] != '@')
@@ -483,12 +486,19 @@ char *libtwirc_parse_tags(const char *msg)
 	}
 
 	char tags[1024];
-	char *next = libtwirc_next_token(tags, msg, " ");
-	if (next != NULL)
-	{
-		fprintf(stderr, "TAGS (%zu): %s\n", strlen(tags), tags);
-	}
-	return next;
+	// TODO should we use next_token or change libtwirc_process_msg to take
+	// the msg parameter as non-const? In that case, we could just use our 
+	// shift_token function instead. Then again, next_token is considerably
+	// simpler (and therefore, hopefully also faster). Then again, if we go
+	// for a non-const msg (and I don't see why we shouldn't, honestly), we
+	// might as well use the strtok library function for everything that's 
+	// currently being done by shift_token and/or next_token, no?
+
+	// TODO process every tag from within tags in some way that makes it
+	// easier for the user to digest them.
+
+
+	return libtwirc_next_token(tags, msg, " ");
 }
 
 void libtwirc_parse_prefix(const char *msg)
@@ -507,7 +517,6 @@ void libtwirc_parse_params(const char *msg)
 }
 
 // TODO
-// https://ircv3.net/specs/core/message-tags-3.2.html
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
 	// ALL OF THIS IS MOSTLY TEMPORARY TEST CODE
