@@ -22,6 +22,7 @@
 #define TWIRC_STATUS_AUTHENTICATED  8
 
 #define TWIRC_BUFFER_SIZE 64 * 1024
+#define TWIRC_NUM_TAGS 16
 
 struct twirc_state;
 
@@ -33,6 +34,11 @@ struct twirc_login
 	char *pass;
 };
 
+// <message> ::= ['@' <tags> <SPACE>] [':' <prefix> <SPACE> ] <command> <params> <crlf>
+// Also, we might want to extract "nick" and "chan" from params, as these two will be in
+// there pretty often - and most likely relevant for the user.
+//
+// (struct twirc_state *s, const char *cmd, const struct twirc_tag **tags, const char *prefix, const char **params) 
 typedef void (*twirc_event)(struct twirc_state *s, const char *msg);
 
 struct twirc_events
@@ -68,6 +74,11 @@ struct twirc_state
 	struct epoll_event epev;        // epoll event struct
 };
 
+struct twirc_tag
+{
+	char *key;
+	char *value;
+};
 
 struct twirc_state* twirc_init(struct twirc_events *e);
 void twirc_set_callbacks(struct twirc_state *s, struct twirc_events *e);

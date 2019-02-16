@@ -418,9 +418,15 @@ size_t libtwirc_next_chunk(char *dest, size_t dlen, const char *src, size_t slen
 /*
  * Finds the first occurrence of the sep string in src, then copies everything 
  * that is found before the separator into dest. The extracted part and the 
- * separator will be removed from src.
- * Returns the size of the copied string, or 0 if the separator could not be found
- * in the src string.
+ * separator will be removed from src. Note that this function will by design
+ * not extract the last token, unless it also ends in the given separator.
+ * This is so because it was designed to extract complete IRC messages from a 
+ * string containing multiple of those, where the last one might be incomplete.
+ * Only extracting tokens that _end_ in the separator guarantees that we will
+ * only extract complete IRC messages and leave incomplete ones in src.
+ *
+ * Returns the size of the copied string, or 0 if the separator could not be 
+ * found in the src string.
  */
 size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
 {
@@ -453,6 +459,13 @@ size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
  * Finds the first occurrence of sep within src, then copies everything before
  * the sep into dest. Returns a pointer to the string after the separator or 
  * NULL if the separator was not found in src.
+ * TODO: doesn't this return a pointer past src once no sep is found anymore?
+ *       also, if we return NULL when there is no separator, we can never get
+ *       to the last token, can we? This is okay for shift_token, as the idea
+ *       behind it is to work on a string made up of multiple IRC messages,
+ *       where even the last one ends in '\r\n', but now that we've made this
+ *       into a rather general-purpose function that takes the seperator as 
+ *       an input parameter, this behavior is rather counter-intuitive, no?
  */
 char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 {
@@ -474,55 +487,110 @@ char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 	return sep_pos + strlen(sep);
 }
 
+struct twirc_tag *libtwirc_create_tag(const char *key, const char *val)
+{
+	struct twirc_tag *tag = malloc(sizeof(struct twirc_tag));
+	tag->key   = key ? strdup(key) : NULL;
+	tag->value = val ? strdup(val) : NULL;
+	return tag;
+}
+
+void libtwirc_destroy_tag(struct twirc_tag *tag)
+{
+	free(tag->key);
+	free(tag->value);
+	free(tag);
+	tag = NULL;
+}
+
+void libtwirc_destroy_tags(struct twirc_tag **tags)
+{
+	if (tags == NULL)
+	{
+		return;
+	}
+	for (int i = 0; tags[i] != NULL; ++i)
+	{
+		libtwirc_destroy_tag(tags[i]);
+	}
+	free(tags);
+	tags = NULL;
+}
+
 /*
- * TODO
+ *
  * https://ircv3.net/specs/core/message-tags-3.2.html
  */
-char *libtwirc_parse_tags(const char *msg)
+struct twirc_tag **libtwirc_parse_tags(char *msg)
 {
+	// If msg doesn't start with "@", then there are no tags
 	if (msg[0] != '@')
 	{
 		return NULL;
 	}
 
-	char tags[1024];
-	// TODO should we use next_token or change libtwirc_process_msg to take
-	// the msg parameter as non-const? In that case, we could just use our 
-	// shift_token function instead. Then again, next_token is considerably
-	// simpler (and therefore, hopefully also faster). Then again, if we go
-	// for a non-const msg (and I don't see why we shouldn't, honestly), we
-	// might as well use the strtok library function for everything that's 
-	// currently being done by shift_token and/or next_token, no?
+	// Get everything until the next space (+1 to skip the "@" prefix)
+	// This will also remove the extracted part from msg!
+	char tag_str[1024];
+	libtwirc_shift_token(tag_str, msg + 1, " ");
+	
+	size_t num_tags = TWIRC_NUM_TAGS;
+	struct twirc_tag **tags = malloc(num_tags * sizeof(struct twirc_tag));
+	memset(tags, 0, num_tags * sizeof(struct twirc_tag));
 
-	// TODO process every tag from within tags in some way that makes it
-	// easier for the user to digest them.
+	char *tag;
+	int i;
+	for (i = 0; (tag = strtok(i == 0 ? tag_str : NULL, ";")) != NULL; ++i)
+	{
+		// Make sure we have enough space; last element has to be NULL
+		if (i >= num_tags - 1)
+		{
+			size_t additional = num_tags * 0.5;
+			num_tags += additional;
+			tags = realloc(tags, num_tags * sizeof(struct twirc_tag));
+			memset(tags + i + 1, 0, additional * sizeof(struct twirc_tag));
+		}
 
+		char *eq = strstr(tag, "=");
+		
+		// It's a key-only tag
+		if (eq == NULL)
+		{
+			tags[i] = libtwirc_create_tag(tag, NULL);
+		}
+		// It's a tag with key-value pair
+		else
+		{
+			eq[0] = '\0';
+			tags[i] = libtwirc_create_tag(tag, eq+1);
+		}
+	}
 
-	return libtwirc_next_token(tags, msg, " ");
+	return tags; 
 }
 
-void libtwirc_parse_prefix(const char *msg)
+char *libtwirc_parse_prefix(char *msg)
 {
-
+	return NULL;
 }
 
-void libtwirc_parse_command(const char *msg)
+char *libtwirc_parse_command(char *msg)
 {
-
+	return NULL;
 }
 
-void libtwirc_parse_params(const char *msg)
+char *libtwirc_parse_params(char *msg)
 {
-
+	return NULL;
 }
 
 // TODO
-int libtwirc_process_msg(struct twirc_state *state, const char *msg)
+int libtwirc_process_msg(struct twirc_state *state, char *msg)
 {
 	// ALL OF THIS IS MOSTLY TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 	
-	libtwirc_parse_tags(msg);
+	struct twirc_tag **tags = libtwirc_parse_tags(msg);
 
 	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
 	{
@@ -547,6 +615,8 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 			state->events.ping(state, msg);
 		}
 	}
+
+	libtwirc_destroy_tags(tags); // segfaults :-(
 	return 0; // TODO
 }
 
@@ -599,7 +669,6 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t dat
 	
 	char msg[2048];
 	msg[0] = '\0';
-	//while (libtwirc_shift_msg(msg, state->buffer) > 0)
 	while (libtwirc_shift_token(msg, state->buffer, "\r\n") > 0)
 	{
 		libtwirc_process_msg(state, msg);
