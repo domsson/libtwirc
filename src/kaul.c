@@ -40,6 +40,12 @@ void handle_connect(struct twirc_state *state, const char *msg)
 	twirc_cmd_join(state, "#domsson");
 }
 
+void handle_welcome(struct twirc_state *state, const char *msg)
+{
+	fprintf(stderr, "handle_welcome()\n");
+	twirc_cmd_join(state, "#domsson");
+}
+
 /*
  *
  */
@@ -64,6 +70,7 @@ int main(void)
 	// SET UP CALLBACKS
 	struct twirc_events e = { 0 };
 	e.connect = handle_connect;
+	e.welcome = handle_welcome;
 	e.join = handle_join;
 
 	// CREATE TWIRC INSTANCE

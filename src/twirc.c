@@ -557,7 +557,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		return 0;
 	}
 	
-	// We're ready to send data
+	// We've got data coming in
 	if (s->epev.events & EPOLLIN)
 	{
 		fprintf(stderr, "*socket ready for reading*\n");
@@ -569,7 +569,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		}
 	}
 	
-	// We've got data coming in
+	// We're ready to send data
 	if (s->epev.events & EPOLLOUT)
 	{
 		fprintf(stderr, "*socket ready for writing*\n");
