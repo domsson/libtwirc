@@ -261,6 +261,7 @@ int twirc_auth(struct twirc_state *state)
  */ 
 int twirc_disconnect(struct twirc_state *state)
 {
+	fprintf(stderr, "Disconnecting...\n");
 	twirc_cmd_quit(state);
 	int ret = stcpnb_close(state->socket_fd);
 	state->status = TWIRC_STATUS_DISCONNECTED;
@@ -337,7 +338,7 @@ int twirc_free(struct twirc_state *state)
  */
 int twirc_kill(struct twirc_state *state)
 {
-	if (state->status == TWIRC_STATUS_CONNECTED)
+	if (state->status & TWIRC_STATUS_CONNECTED)
 	{
 		twirc_disconnect(state);
 	}
@@ -357,7 +358,7 @@ int twirc_kill(struct twirc_state *state)
  * Returns the number of bytes copied + 1, so this value can be used as an offset for 
  * successive calls of this function, or slen if all chunks have been read. 
  */
-size_t libtwirc_shift_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
+size_t libtwirc_next_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
 {
 	/*
 	 | recv() 1    | recv() 2       |
@@ -414,9 +415,9 @@ size_t libtwirc_shift_chunk(char *dest, size_t dlen, const char *src, size_t sle
 }
 
 /*
- * Looks for a complete IRC command (ends in '\r\n') in src, then copies it over
+ * Looks for a complete IRC message (ends in '\r\n') in src, then copies it over
  * to dest. The copied part will be removed from src.
- * Returns the size of the copied substring, or 0 if no complete command was found
+ * Returns the size of the copied substring, or 0 if no complete message was found
  * in src.
  */
 size_t libtwirc_shift_msg(char *dest, char *src)
@@ -446,12 +447,39 @@ size_t libtwirc_shift_msg(char *dest, char *src)
 	return msg_len;
 }	
 
+void libtwirc_parse_tags(const char *msg)
+{
+	if (msg[0] != '@')
+	{
+		return;
+	}
+
+	char *space = strstr(msg, " ");
+	fprintf(stderr, "TAGS: %s\n", space);
+	fprintf(stderr, "Length of tags: %ld\n", space - msg);
+}
+
+void libtwirc_parse_prefix(const char *msg)
+{
+}
+
+void libtwirc_parse_command(const char *msg)
+{
+}
+
+void libtwirc_parse_params(const char *msg)
+{
+}
+
 // TODO
 // https://ircv3.net/specs/core/message-tags-3.2.html
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
 	// ALL OF THIS IS MOSTLY TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	
+	libtwirc_parse_tags(msg);
+
 	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
 	{
 		state->status |= TWIRC_STATUS_AUTHENTICATED;
@@ -484,7 +512,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
  * should be processed right away.
  * TODO
  */
-int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t bytes_received)
+int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t data)
 {
 	/*
 	    +----------------------+----------------+
@@ -498,7 +526,7 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t byt
 	    -> shift_chunk() 2.1 => "ORD MYPASS\r\n\0"
 	*/
 
-	char chunk[1024];
+	char chunk[2048];
 	chunk[0] = '\0';
 	int off = 0;
 
@@ -510,7 +538,7 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t byt
 	// case one of them is incomplete, but the next one is (plus brings 
 	// what was missing of the first one).
 
-	while ((off = libtwirc_shift_chunk(chunk, TWIRC_BUFFER_SIZE, buf, bytes_received, off)) > 0)
+	while ((off = libtwirc_next_chunk(chunk, TWIRC_BUFFER_SIZE, buf, data, off)) > 0)
 	{
 		// Concatenate the current buffer and the newly extracted chunk
 		strcat(state->buffer, chunk);
@@ -525,7 +553,7 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t byt
 	// Hopefully, successive recv() calls will bring in the missing 
 	// pieces. If not, we will run into issues...
 	
-	char msg[1024];
+	char msg[2048];
 	msg[0] = '\0';
 	while (libtwirc_shift_msg(msg, state->buffer) > 0)
 	{
