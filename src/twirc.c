@@ -413,39 +413,7 @@ size_t libtwirc_next_chunk(char *dest, size_t dlen, const char *src, size_t slen
 	// If we've read all data, return slen, otherwise the offset to the next chunk
 	return new_off >= slen ? slen : new_off;
 }
-
-/*
- * Looks for a complete IRC message (ends in '\r\n') in src, then copies it over
- * to dest. The copied part will be removed from src.
- * Returns the size of the copied substring, or 0 if no complete message was found
- * in src.
- */
-size_t libtwirc_shift_msg(char *dest, char *src)
-{
-	// Find the first occurence of a line break
-	char *crlf = strstr(src, "\r\n");
-	if (crlf == NULL)
-	{
-		return 0;
-	}
 	
-	// Figure out the length of the first command
-	size_t src_len = strlen(src);
-	size_t end_len = strlen(crlf);
-	size_t msg_len = src_len - end_len;
-	
-	// Copy the command to the dest buffer
-	strncpy(dest, src, msg_len);
-	dest[msg_len] = '\0';
-
-	// Remove the copied part from src
-	memmove(src, crlf + 2, end_len - 2);
-
-	// Make sure src is null terminated again
-	src[end_len-2] = '\0';
-
-	return msg_len;
-}	
 
 /*
  * Finds the first occurrence of the sep string in src, then copies everything 
@@ -482,16 +450,45 @@ size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
 	return tok_len;
 }
 
-void libtwirc_parse_tags(const char *msg)
+/*
+ * Finds the first occurrence of sep within src, then copies everything before
+ * the sep into dest. Returns a pointer to the string after the separator or 
+ * NULL if the separator was not found in src.
+ */
+char *libtwirc_next_token(char *dest, const char *src, const char *sep)
+{
+	// Find the first occurence of the separator
+	char *sep_pos = strstr(src, sep);
+	if (sep_pos == NULL)
+	{
+		return NULL;
+	}
+
+	// Figure out the length of the token
+	size_t tok_len = sep_pos - src;
+
+	// Copy the token to the dest buffer
+	strncpy(dest, src, tok_len);
+	dest[tok_len] = '\0';
+
+	// Return a pointer to the remaining string
+	return sep_pos + strlen(sep);
+}
+
+char *libtwirc_parse_tags(const char *msg)
 {
 	if (msg[0] != '@')
 	{
-		return;
+		return NULL;
 	}
 
-	char *space = strstr(msg, " ");
-	fprintf(stderr, "TAGS: %s\n", space);
-	fprintf(stderr, "Length of tags: %ld\n", space - msg);
+	char tags[1024];
+	char *next = libtwirc_next_token(tags, msg, " ");
+	if (next != NULL)
+	{
+		fprintf(stderr, "TAGS (%zu): %s\n", strlen(tags), tags);
+	}
+	return next;
 }
 
 void libtwirc_parse_prefix(const char *msg)
