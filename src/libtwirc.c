@@ -686,7 +686,6 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	// received, but will definitely be added in the chunk.
 
 	char *chunk = malloc(len + 1);
-	fprintf(stderr, ">>> Allocated %zu bytes for the chunk buffer\n", len + 1);
 	chunk[0] = '\0';
 	int off = 0;
 
@@ -727,33 +726,10 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	return 0; // TODO
 }
 
-int twirc_tick(struct twirc_state *s, int timeout)
+int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 {
-	struct epoll_event epev;
-	
-	// TODO important: do we need to account for multiple events?
-	// Seeing how we have a user-defined timeout, I would definitely think so!
-	// This means everything the whole event evaluation code has to be run in
-	// a loop, which runs num_events times until all events have been processed!
-	// It also means that we have to decide upon a max_events number (how?).
-	int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
-
-	// An error has occured
-	if (num_events == -1)
-	{
-		fprintf(stderr, "epoll_wait encountered an error\n");
-		s->running = 0;
-		return -1;
-	}
-	
-	// No events have occured
-	if (num_events == 0)
-	{
-		return 0;
-	}
-	
 	// We've got data coming in
-	if(epev.events & EPOLLIN)
+	if(epev->events & EPOLLIN)
 	{
 		fprintf(stderr, "*socket ready for reading*\n");
 		char buf[TWIRC_BUFFER_SIZE];
@@ -765,11 +741,15 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	}
 	
 	// We're ready to send data
-	if (epev.events & EPOLLOUT)
+	if (epev->events & EPOLLOUT)
 	{
 		fprintf(stderr, "*socket ready for writing*\n");
 		if (s->status & TWIRC_STATUS_CONNECTING)
 		{
+			// TODO: do we really need to ask stcpnb_status()?
+			// When the socket is ready for writing after we made
+			// a connection attempt, can't we assume that wer are
+			// now connected to the server?
 			int conn_status = stcpnb_status(s->socket_fd);
 			if (conn_status == 0)
 			{
@@ -801,7 +781,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	}
 	
 	// Server closed the connection
-	if (epev.events & EPOLLRDHUP)
+	if (epev->events & EPOLLRDHUP)
 	{
 		fprintf(stderr, "EPOLLRDHUP (peer closed socket connection)\n");
 		s->status = TWIRC_STATUS_DISCONNECTED;
@@ -810,7 +790,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	}
 	
 	// Server closed the connection 
-	if (epev.events & EPOLLHUP) // will fire, even if not added explicitly
+	if (epev->events & EPOLLHUP) // will fire, even if not added explicitly
 	{
 		fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
 		s->status = TWIRC_STATUS_DISCONNECTED;
@@ -819,15 +799,44 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	}
 
 	// Connection error
-	if (epev.events & EPOLLERR) // will fire, even if not added explicitly
+	if (epev->events & EPOLLERR) // will fire, even if not added explicitly
 	{
 		fprintf(stderr, "EPOLLERR (socket error)\n");
 		s->status = TWIRC_STATUS_DISCONNECTED;
 		s->running = 0;
 		return -1;
 	}
-
+	
 	return 0;
+}
+
+int twirc_tick(struct twirc_state *s, int timeout)
+{
+	struct epoll_event epev;
+	//struct epoll_event events[TWIRC_MAX_EVENTS];
+	
+	// TODO important: do we need to account for multiple events?
+	// Seeing how we have a user-defined timeout, I would definitely think so!
+	// This means everything the whole event evaluation code has to be run in
+	// a loop, which runs num_events times until all events have been processed!
+	// It also means that we have to decide upon a max_events number (how?).
+	int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
+
+	// An error has occured
+	if (num_events == -1)
+	{
+		fprintf(stderr, "epoll_wait encountered an error\n");
+		s->running = 0;
+		return -1;
+	}
+	
+	// No events have occured
+	if (num_events == 0)
+	{
+		return 0;
+	}
+
+	return libtwirc_handle_event(s, &epev);
 }
 
 /*
