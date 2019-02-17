@@ -43,10 +43,9 @@
 // user's nickname. 128 would probably do, but 256 seems to be a safer choice.
 #define TWIRC_PREFIX_SIZE 256
 
-// The length of nicknames (usernames) on Twitch is limited to 15. Add one for
-// the null terminator, and we conveniently end up with a buffer size of 16.
-// https://help.twitter.com/en/managing-your-account/twitter-username-rules
-#define TWIRC_NICK_SIZE 16
+// The length of nicknames (usernames) on Twitch is limited to 25.
+// https://www.reddit.com/r/Twitch/comments/32w5b2/username_requirements/
+#define TWIRC_NICK_SIZE 32
 
 // The number of expected tags in an IRC message. This will be used to allocate 
 // memory for the tags. If this number is smaller than the actual number of 
