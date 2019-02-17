@@ -10,7 +10,7 @@
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include "stcpnb.c"
-#include "twirc.h"
+#include "libtwirc.h"
 
 /*
  * Initiates a connection with the given server.

@@ -3,7 +3,7 @@
 #include <string.h>     //
 #include <errno.h>      // errno
 #include <sys/types.h>  // ssize_t
-#include "twirc.h"
+#include "libtwirc.h"
 
 /*
  *
