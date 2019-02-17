@@ -498,7 +498,7 @@ struct twirc_tag *libtwirc_create_tag(const char *key, const char *val)
 	return tag;
 }
 
-void libtwirc_destroy_tag(struct twirc_tag *tag)
+void libtwirc_free_tag(struct twirc_tag *tag)
 {
 	free(tag->key);
 	free(tag->value);
@@ -506,7 +506,7 @@ void libtwirc_destroy_tag(struct twirc_tag *tag)
 	tag = NULL;
 }
 
-void libtwirc_destroy_tags(struct twirc_tag **tags)
+void libtwirc_free_tags(struct twirc_tag **tags)
 {
 	if (tags == NULL)
 	{
@@ -514,10 +514,24 @@ void libtwirc_destroy_tags(struct twirc_tag **tags)
 	}
 	for (int i = 0; tags[i] != NULL; ++i)
 	{
-		libtwirc_destroy_tag(tags[i]);
+		libtwirc_free_tag(tags[i]);
 	}
 	free(tags);
 	tags = NULL;
+}
+
+void libtwirc_free_params(char **params)
+{
+	if (params == NULL)
+	{
+		return;
+	}
+	for (int i = 0; params[i] != NULL; ++i)
+	{
+		free(params[i]);
+	}
+	free(params);
+	params = NULL;
 }
 
 /*
@@ -527,29 +541,36 @@ void libtwirc_destroy_tags(struct twirc_tag **tags)
  * value of a tag, respectively. The value member of a tag can be NULL for tags 
  * that are key-only. The last element of the array will be a NULL pointer, so 
  * you can loop over all tags until you hit NULL. The number of extracted tags
- * is not returned. If no tags have been found at the beginning of msg, NULL 
- * will be returned. 
+ * is returned in len. If no tags have been found at the beginning of msg, tags
+ * will be NULL, len will be 0 and this function will return a pointer to msg.
+ * Otherwise, a pointer to the part of msg after the tags will be returned. 
  *
  * TODO un-escape the tag values before saving them in the tag structs!
  *
  * https://ircv3.net/specs/core/message-tags-3.2.html
  */
-struct twirc_tag **libtwirc_parse_tags(char *msg)
+const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_t *len)
 {
 	// If msg doesn't start with "@", then there are no tags
 	if (msg[0] != '@')
 	{
-		return NULL;
+		*len = 0;
+		*tags = NULL;
+		return msg;
 	}
 
-	// Get everything until the next space (+1 to skip the "@" prefix)
-	// This will also remove the extracted part from msg!
-	char tag_str[1024];
-	libtwirc_shift_token(tag_str, msg + 1, " ");
+	// Find the next space (the end of the tags string within msg)
+	char *next = strstr(msg, " ");
 	
+	// Duplicate the string from after the '@' until the next space
+	char *tag_str = strndup(msg + 1, next - (msg + 1));
+
+	// Set the initial number of tags we want to allocate memory for
 	size_t num_tags = TWIRC_NUM_TAGS;
-	struct twirc_tag **tags = malloc(num_tags * sizeof(struct twirc_tag));
-	memset(tags, 0, num_tags * sizeof(struct twirc_tag));
+	
+	// Allocate memory in the provided pointer to ptr-to-array-of-structs
+	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
+	memset(*tags, 0, num_tags * sizeof(struct twirc_tag*));
 
 	char *tag;
 	int i;
@@ -558,10 +579,10 @@ struct twirc_tag **libtwirc_parse_tags(char *msg)
 		// Make sure we have enough space; last element has to be NULL
 		if (i >= num_tags - 1)
 		{
-			size_t additional = num_tags * 0.5;
-			num_tags += additional;
-			tags = realloc(tags, num_tags * sizeof(struct twirc_tag));
-			memset(tags + i + 1, 0, additional * sizeof(struct twirc_tag));
+			size_t add = num_tags * 0.5;
+			num_tags += add;
+			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
+			memset(*tags + i + 1, 0, add * sizeof(struct twirc_tag*));
 		}
 
 		char *eq = strstr(tag, "=");
@@ -569,13 +590,13 @@ struct twirc_tag **libtwirc_parse_tags(char *msg)
 		// It's a key-only tag
 		if (eq == NULL)
 		{
-			tags[i] = libtwirc_create_tag(tag, NULL);
+			(*tags)[i] = libtwirc_create_tag(tag, NULL);
 		}
 		// It's a tag with key-value pair
 		else
 		{
 			eq[0] = '\0';
-			tags[i] = libtwirc_create_tag(tag, eq+1);
+			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
 		}
 	}
 
@@ -583,78 +604,180 @@ struct twirc_tag **libtwirc_parse_tags(char *msg)
 	// for the number of tags extracted (i), or would it be faster to just
 	// go with what we have? In other words, CPU vs. memory, which one?
 
-	return tags; 
+	free(tag_str);
+	*len = i;
+
+	// Return a pointer to the remaining part of msg
+	return next + 1;
 }
 
 /*
  * Extracts the prefix from the beginning of msg, if there is one. The prefix 
- * will be returned as a pointer to a dynamically allocated string. The caller
- * needs to make sure to free the memory at some point. If no prefix was found 
- * at the beginning of msg, a null pointer is returned.
+ * will be returned as a pointer to a dynamically allocated string in prefix.
+ * The caller needs to make sure to free the memory at some point. If no prefix
+ * was found at the beginning of msg, prefix will be NULL. Returns a pointer to
+ * the next part of the message, after the prefix.
  */
-char *libtwirc_parse_prefix(char *msg)
+const char *libtwirc_parse_prefix(const char *msg, char **prefix)
 {
 	if (msg[0] != ':')
 	{
+		prefix = NULL;
+		return msg;
+	}
+	
+	// Find the next space (the end of the prefix string within msg)
+	char *next = strstr(msg, " ");
+
+	// Duplicate the string from after the ':' until the next space
+	*prefix = strndup(msg + 1, next - (msg + 1));
+
+	// Return a pointer to the remaining part of msg
+	return next + 1;
+}
+
+const char *libtwirc_parse_command(const char *msg, char **cmd)
+{
+	char *next = NULL;
+
+	// Find the next space (the end of the cmd string withing msg)
+	next = strstr(msg, " ");
+
+	// Duplicate the string from start to next space or end of msg
+	*cmd = strndup(msg, next == NULL ? strlen(msg) - 2 : next - msg);
+	
+	// Return NULL if cmd was the last bit of msg, or a pointer to
+	// the remaining part (the parameters)
+	return next == NULL ? NULL : next + 1;
+}
+
+const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
+{
+	if (msg == NULL)
+	{
+		*len = 0;
+		*params = NULL;
 		return NULL;
 	}
 
-	// Get everything until the next space (+1 to skil the ":" prefix)
-	// This will also remove the extracted part from msg!
-	char *prefix = malloc(TWIRC_PREFIX_SIZE * sizeof(char));
-	size_t prefix_len = libtwirc_shift_token(prefix, msg + 1, " ");
+	// Initialize params to hold TWIRC_NUM_PARAMS pointers to char
+	size_t num_params = TWIRC_NUM_PARAMS;
+	*params = malloc(num_params * sizeof(char*));
+	memset(*params, 0, num_params * sizeof(char*));
 
-	// Trim the used memory to only what we actually need
-	prefix = realloc(prefix, prefix_len + 1);
+	// Copy everything that's left in msg (params are always last)
+	char *p = strdup(msg);
+	
+	// Now we'll split on spaces until we hit a token that start with ":"
+	char *t;
+	int i;
+	for (i = 0; (t = strtok(i==0 ? p : NULL, " ")) != NULL; ++i)
+	{
+		// Make sure we have enough space; last element has to be NULL
+		if (i >= num_params - 1)
+		{
+			fprintf(stderr, "REALLOC() in action, BITCHES!\n");
+			size_t add = num_params;
+			num_params += add;
+			*params = realloc(*params, num_params * sizeof(char*));
+			memset(*params + i + 1, 0, add * sizeof(char*));
+		}
 
-	return prefix;
-}
+		// It's the trailing (last) parameter, which can include spaces
+		if (t[0] == ':')
+		{
+			// Revert the space-to-null-terminator conversion that
+			// strtok() performed, so that our strdup() will copy 
+			// everything until the end of msg, not until next " "
+			t[strlen(t)] = ' ';
 
-char *libtwirc_parse_command(char *msg)
-{
-	return NULL;
-}
+			// Duplicate this token, but omit the ':' prefix
+			(*params)[i] = strdup(t+1);
+			
+			fprintf(stderr, ">>> PARAM #%d: %s\n", i, (*params)[i]);
 
-char *libtwirc_parse_params(char *msg)
-{
+			// This was the last parameter, bail out of strtok()
+			break;
+		}
+		else
+		{	
+			// Duplicate this token, adding it to params!
+			(*params)[i] = strdup(t);
+			fprintf(stderr, ">>> PARAM #%d: %s\n", i, (*params)[i]);
+		}
+	}
+
+	free(p);
+	*len = i;
+
+	// We've reached the end of msg, so we'll return NULL
 	return NULL;
 }
 
 // TODO
-int libtwirc_process_msg(struct twirc_state *state, char *msg)
+int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	// ALL OF THIS IS MOSTLY TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	
+	// Extract the tags, if any
+	struct twirc_tag **tags = NULL;
+	size_t num_tags;
+	msg = libtwirc_parse_tags(msg, &tags, &num_tags);
+	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
-	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
+	// Extract the prefix, if any
+	char *prefix = NULL;	
+	msg = libtwirc_parse_prefix(msg, &prefix);
+	//fprintf(stderr, ">>> prefix: %s\n", prefix);
+
+	// Extract the command
+	char *cmd = NULL;
+	msg = libtwirc_parse_command(msg, &cmd);
+	//fprintf(stderr, ">>> cmd: %s\n", cmd);
+
+	// Extract the parameters, if any
+	char **params = NULL;
+	size_t num_params;
+	msg = libtwirc_parse_params(msg, &params, &num_params);
+	//fprintf(stderr, ">>> params: %s\n", params);
+
+
+	// Some temporary test code
+	if (strcmp(cmd, "001") == 0)
 	{
 		state->status |= TWIRC_STATUS_AUTHENTICATED;
 		if (state->events.welcome != NULL)
 		{
-			state->events.welcome(state, msg);
+			state->events.welcome(state, "");
 		}
+
 	}
-	if (strstr(msg, "tmi.twitch.tv JOIN #") != NULL)
+	if (strcmp(cmd, "JOIN") == 0)
 	{
 		if (state->events.join != NULL)
 		{
-			state->events.join(state, msg);
+			state->events.join(state, "");
 		}
+
 	}
-	if (strstr(msg, "PING :tmi.twitch.tv") != NULL)
+	if (strcmp(cmd, "PING") == 0)
 	{
-		twirc_send(state, "PONG :tmi.twitch.tv");
+		char pong[128];
+		pong[0] = '\0';
+		snprintf(pong, 128, "PONG %s", params[0]);
+
+		twirc_send(state, pong);
 		if (state->events.ping != NULL)
 		{
-			state->events.ping(state, msg);
+			state->events.ping(state, "");
 		}
 	}
-	
-	struct twirc_tag **tags = libtwirc_parse_tags(msg);
-	char *prefix = libtwirc_parse_prefix(msg);
 
-	libtwirc_destroy_tags(tags);
+	// Free resources from parsed message
+	libtwirc_free_tags(tags);
 	free(prefix);
+	free(cmd);
+	libtwirc_free_params(params);
 
 	return 0; // TODO
 }
@@ -727,7 +850,6 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 }
 
 /*
- * TODO do we need stcpnb_status()?
  * Handles the epoll event epev.
  * Returns 0 on success, -1 if the connection has been interrupted.
  */
@@ -751,10 +873,12 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 		fprintf(stderr, "*socket ready for writing*\n");
 		if (s->status & TWIRC_STATUS_CONNECTING)
 		{
+			/*
 			// TODO: do we really need to ask stcpnb_status()?
 			// When the socket is ready for writing after we made
-			// a connection attempt, can't we assume that wer are
+			// a connection attempt, can't we assume that we are
 			// now connected to the server?
+
 			int conn_status = stcpnb_status(s->socket_fd);
 			if (conn_status == 0)
 			{
@@ -772,6 +896,14 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 			if (conn_status == -2)
 			{
 				fprintf(stderr, "Could not get socket status\n");
+			}
+			*/
+
+			fprintf(stderr, "Connection established!\n");
+			s->status = TWIRC_STATUS_CONNECTED;
+			if (s->events.connect != NULL)
+			{
+				s->events.connect(s, "");
 			}
 		}
 		if (s->status & TWIRC_STATUS_CONNECTED)
@@ -855,10 +987,16 @@ int twirc_tick(struct twirc_state *s, int timeout)
 }
 
 /*
- * TODO
+ * Runs an endless loop that waits for events timeout milliseconds at a time.
+ * Once the connection has been closed or the state's running field has been 
+ * set to 0, the loops is ended and this function returns with a value of 0.
  */
 int twirc_loop(struct twirc_state *state, int timeout)
 {
+	// TODO we should probably put some connection time-out code in place
+	// so that we stop running after the connection attempt has been going 
+	// on for so-and-so long. Or shall we leave that up to the user code?
+
 	state->running = 1;
 	while (state->running)
 	{

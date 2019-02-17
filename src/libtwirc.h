@@ -46,7 +46,13 @@
 // user's nickname. 128 would probably do, but 256 seems to be a safer choice.
 #define TWIRC_PREFIX_SIZE 256
 
-// The length of nicknames (usernames) on Twitch is limited to 25.
+// The command is always present, it tells us what kind of message we received.
+// this could be PING or PRIVMSG or one of many possible numerical codes. 
+// The page below lists known commands, the longest seems to be UNLOADMODULE or
+// RELOADMODULE, both have a length of 12. Hence, a size of 16 seems enough.
+#define TWIRC_COMMAND_SIZE 16
+
+// The length of Twitch user names is limited to 25. Hence, 32 will do us fine.
 // https://www.reddit.com/r/Twitch/comments/32w5b2/username_requirements/
 #define TWIRC_NICK_SIZE 32
 
@@ -58,6 +64,15 @@
 // that can be expected in a message. Tests have shown that Twitch IRC usually 
 // sends 13 tags per IRC message, so 16 seems to be a reasonable choice. 
 #define TWIRC_NUM_TAGS 16
+
+// The number of parameters is different depending on the type of the command.
+// For most commands, two to three params will be sent, for some 4, for a few
+// select commands even more. It seems reasonable to set this to 4, as it will
+// cover most cases and only require realloc() in very rare cases, I believe.
+// Conveniently, the maximum number of parameters is 15, leaving one for NULL.
+// So we'll just realloc twice the size when we run out, going 4 to 8 to 16.
+// http://www.networksorcery.com/enp/protocol/irc.htm
+#define TWIRC_NUM_PARAMS 4
 
 // This is how many events we can account for in one call to epoll_wait(), or
 // one call to twirc_tick(). I'm honestly not sure how to pick a number here,
