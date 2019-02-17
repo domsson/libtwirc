@@ -12,7 +12,7 @@ I wanted to write a Twitch chat bot in C. I found `libircclient` and was using i
 
 - **THIS NEEDS UNIT TESTS, DON'T BE LAZY DOMSSON**
 - Question: what's the maximum amount of data the Twitch IRC servers will send in one go? 
-- Possible answer: TCP max packet size is, according to some SO post, 64K. So that should definitely suffice.
+- Possible answer: TCP max packet size is, according to some SO post, 64K. So that should definitely suffice. However, a smaller buffer should still be fine as we can just call recv() over and over until we've processed all the data that is waiting. So I'm still undecided on the buffer size.
 - The Twitch IRC server often sends several messages in one go, so you have to split the received data on the null terminator yourself, a simple strtok() won't work
 - Also see [this article on the issues of receiving network data](https://faq.cprogramming.com/cgi-bin/smartfaq.cgi?id=1044780608&answer=1108255660) for how received data can be split up pretty randomly, which means we need to program against this and assemble everything on our side 
 - Maximum message length seems to be 500 bytes (that is the actual, visible chat message itself, excluding tags, command name and prefix), which means Twitch seems to abide by the IRCv3 protocol limitations
