@@ -809,7 +809,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		return -1;
 	}
 	
-	// Connection has been lost
+	// Server closed the connection 
 	if (epev.events & EPOLLHUP) // will fire, even if not added explicitly
 	{
 		fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
@@ -817,6 +817,16 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		s->running = 0;
 		return -1;
 	}
+
+	// Connection error
+	if (epev.events & EPOLLERR) // will fire, even if not added explicitly
+	{
+		fprintf(stderr, "EPOLLERR (socket error)\n");
+		s->status = TWIRC_STATUS_DISCONNECTED;
+		s->running = 0;
+		return -1;
+	}
+
 	return 0;
 }
 

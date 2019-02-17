@@ -25,7 +25,10 @@
 // tags, prefix, command or parameter length into account for the total length
 // of the message, which can often result in messages that easily exceed the 
 // 1024 bytes length limit as described by the IRCv3 spec. According to some 
-// tests, we should be fine with doubling that to 2048.
+// tests, we should be fine with doubling that to 2048. Note that the internal
+// buffer of the twirc_state struct will use a buffer that is twice as big as
+// TWIRC_MESSAGE_SIZE in order to be able to accomodate parts of an incomplete
+// message in addition to a complete one.
 #define TWIRC_MESSAGE_SIZE 2048
 
 // The buffer size will be used for retrieving network data via recv(), which 
