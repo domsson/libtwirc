@@ -1,5 +1,3 @@
-#include <sys/epoll.h>    // struct epoll_event
-
 #ifndef LIBTWIRC_H
 #define LIBTWIRC_H
 
@@ -71,7 +69,6 @@ struct twirc_state
 	struct twirc_login login;       // irc login data 
 	struct twirc_events events;     // event callbacks
 	int epfd;                       // epoll file descriptor
-	struct epoll_event epev;        // epoll event struct
 };
 
 struct twirc_tag
