@@ -534,6 +534,11 @@ void libtwirc_free_params(char **params)
 	params = NULL;
 }
 
+void libtwirc_prefix_to_nick(char *nick, const char *prefix)
+{
+	// TODO
+}
+
 /*
  * Extracts tags from the beginning of an IRC message, if any, and returns them
  * as a pointer to a dynamically allocated array of twirc_tag structs, where 
@@ -605,7 +610,7 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	// go with what we have? In other words, CPU vs. memory, which one?
 
 	free(tag_str);
-	*len = i;
+	*len = i + 1;
 
 	// Return a pointer to the remaining part of msg
 	return next + 1;
@@ -676,7 +681,6 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 		// Make sure we have enough space; last element has to be NULL
 		if (i >= num_params - 1)
 		{
-			fprintf(stderr, "REALLOC() in action, BITCHES!\n");
 			size_t add = num_params;
 			num_params += add;
 			*params = realloc(*params, num_params * sizeof(char*));
@@ -686,6 +690,14 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 		// It's the trailing (last) parameter, which can include spaces
 		if (t[0] == ':')
 		{
+			// TODO there is some serious bug in here! When there
+			// are multiple words in the trailing parameter, it 
+			// works as expected. If the trailing parameter is just
+			// one word, however, we are copying garbage at the end!
+			// Probably because we override the actual END OF msg 
+			// with a space... we'll have to account for this!
+			// IMPORTANT!
+
 			// Revert the space-to-null-terminator conversion that
 			// strtok() performed, so that our strdup() will copy 
 			// everything until the end of msg, not until next " "
@@ -708,7 +720,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 	}
 
 	free(p);
-	*len = i;
+	*len = i + 1;
 
 	// We've reached the end of msg, so we'll return NULL
 	return NULL;
@@ -739,10 +751,11 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	char **params = NULL;
 	size_t num_params;
 	msg = libtwirc_parse_params(msg, &params, &num_params);
+	fprintf(stderr, ">>> num_params: %zu\n", num_params);
 	//fprintf(stderr, ">>> params: %s\n", params);
 
 
-	// Some temporary test code
+	// Some temporary test code (the first bit is important tho)
 	if (strcmp(cmd, "001") == 0)
 	{
 		state->status |= TWIRC_STATUS_AUTHENTICATED;
@@ -770,6 +783,14 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 		if (state->events.ping != NULL)
 		{
 			state->events.ping(state, "");
+		}
+	}
+
+	if (strcmp(cmd, "PRIVMSG") == 0 && num_params >= 2)
+	{
+		if (params[1][0] == 0x01 && params[1][strlen(params[1])-1] == 0x01)
+		{
+			fprintf(stderr, "[!] CTCP detected\n");
 		}
 	}
 
