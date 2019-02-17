@@ -4,6 +4,9 @@ twirc will be a minimal Twitch IRC library written in C. There will be no suppor
 
 Part of the development currently happens live on Twitch: [twitch.tv/domsson](https://twitch.tv/domsson)
 
+# Motivation
+
+I wanted to write a Twitch chat bot in C. I found `libircclient` and was using it happily, but ran into two issues. First, it doesn't support IRCv3 tags, which Twitch is using. Second, it uses a GPL license. Now, my bot (and almost all my software) is CC0 (aka public domain) and even after more than 4 hours of research, I couldn't figure out if I would be able to release my code as CC0 when using a GPL licensend library. This, plus the fact that I'm still learning C and looking for small projects to help me gain more experience, I decided to write my own IRC library. To keep the scope smaller, I decided to make it Twitch-specific and, for now, Linux only. 
 
 # Development Notes
 
