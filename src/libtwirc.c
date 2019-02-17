@@ -518,6 +518,16 @@ void libtwirc_destroy_tags(struct twirc_tag **tags)
 }
 
 /*
+ * Extracts tags from the beginning of an IRC message, if any, and returns them
+ * as a pointer to a dynamically allocated array of twirc_tag structs, where 
+ * each struct contains two members, key and value, representing the key and 
+ * value of a tag, respectively. The value member of a tag can be NULL for tags 
+ * that are key-only. The last element of the array will be a NULL pointer, so 
+ * you can loop over all tags until you hit NULL. The number of extracted tags
+ * is not returned. If no tags have been found at the beginning of msg, NULL 
+ * will be returned. 
+ *
+ * TODO un-escape the tag values before saving them in the tag structs!
  *
  * https://ircv3.net/specs/core/message-tags-3.2.html
  */
@@ -566,12 +576,35 @@ struct twirc_tag **libtwirc_parse_tags(char *msg)
 		}
 	}
 
+	// TODO should we re-alloc to use exactly the amount of memory we need
+	// for the number of tags extracted (i), or would it be faster to just
+	// go with what we have? In other words, CPU vs. memory, which one?
+
 	return tags; 
 }
 
+/*
+ * Extracts the prefix from the beginning of msg, if there is one. The prefix 
+ * will be returned as a pointer to a dynamically allocated string. The caller
+ * needs to make sure to free the memory at some point. If no prefix was found 
+ * at the beginning of msg, a null pointer is returned.
+ */
 char *libtwirc_parse_prefix(char *msg)
 {
-	return NULL;
+	if (msg[0] != ':')
+	{
+		return NULL;
+	}
+
+	// Get everything until the next space (+1 to skil the ":" prefix)
+	// This will also remove the extracted part from msg!
+	char *prefix = malloc(TWIRC_PREFIX_SIZE * sizeof(char));
+	size_t prefix_len = libtwirc_shift_token(prefix, msg + 1, " ");
+
+	// Trim the used memory to only what we actually need
+	prefix = realloc(prefix, prefix_len + 1);
+
+	return prefix;
 }
 
 char *libtwirc_parse_command(char *msg)
@@ -589,8 +622,6 @@ int libtwirc_process_msg(struct twirc_state *state, char *msg)
 {
 	// ALL OF THIS IS MOSTLY TEMPORARY TEST CODE
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
-	
-	struct twirc_tag **tags = libtwirc_parse_tags(msg);
 
 	if (strstr(msg, ":tmi.twitch.tv 001 ") != NULL)
 	{
@@ -615,18 +646,23 @@ int libtwirc_process_msg(struct twirc_state *state, char *msg)
 			state->events.ping(state, msg);
 		}
 	}
+	
+	struct twirc_tag **tags = libtwirc_parse_tags(msg);
+	char *prefix = libtwirc_parse_prefix(msg);
 
-	libtwirc_destroy_tags(tags); // segfaults :-(
+	libtwirc_destroy_tags(tags);
+	free(prefix);
+
 	return 0; // TODO
 }
 
 /*
- * Process the received data, stored in buf, with a length of bytes_received.
- * Incomplete commands should be buffered in state->buffer, complete commands
- * should be processed right away.
+ * Process the received data in buf, which has a size of len bytes.
+ * Incomplete commands will be buffered in state->buffer, complete commands
+ * will be processed right away.
  * TODO
  */
-int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t data)
+int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len)
 {
 	/*
 	    +----------------------+----------------+
@@ -640,19 +676,19 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t dat
 	    -> shift_chunk() 2.1 => "ORD MYPASS\r\n\0"
 	*/
 
-	char chunk[2048];
+	char chunk[TWIRC_CHUNK_SIZE];
 	chunk[0] = '\0';
 	int off = 0;
 
 	// Here, we'll get one chunk at a time, where a chunk is a part of the
 	// recieved bytes that ends in a null terminator. We'll add all of the 
 	// extracted chunks to the buffer, which might already contain parts of
-	// an incomplete IRC command. TODO we'll need to make sure that  the 
+	// an incomplete IRC command. TODO we'll need to make sure that the 
 	// buffer is sufficiently big to contain more than one 'delivery' in
 	// case one of them is incomplete, but the next one is (plus brings 
 	// what was missing of the first one).
 
-	while ((off = libtwirc_next_chunk(chunk, TWIRC_BUFFER_SIZE, buf, data, off)) > 0)
+	while ((off = libtwirc_next_chunk(chunk, TWIRC_CHUNK_SIZE, buf, len, off)) > 0)
 	{
 		// Concatenate the current buffer and the newly extracted chunk
 		strcat(state->buffer, chunk);
@@ -667,7 +703,7 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t dat
 	// Hopefully, successive recv() calls will bring in the missing 
 	// pieces. If not, we will run into issues...
 	
-	char msg[2048];
+	char msg[TWIRC_MESSAGE_SIZE];
 	msg[0] = '\0';
 	while (libtwirc_shift_token(msg, state->buffer, "\r\n") > 0)
 	{
@@ -680,7 +716,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 {
 	struct epoll_event epev;
 	
-	// TODO do we need to account for multiple events?
+	// TODO important: do we need to account for multiple events?
 	// Seeing how we have a user-defined timeout, I would definitely think so!
 	// This means everything the whole event evaluation code has to be run in
 	// a loop, which runs num_events times until all events have been processed!
