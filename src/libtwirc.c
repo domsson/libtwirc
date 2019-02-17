@@ -726,6 +726,11 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	return 0; // TODO
 }
 
+/*
+ * TODO do we need stcpnb_status()?
+ * Handles the epoll event epev.
+ * Returns 0 on success, -1 if the connection has been interrupted.
+ */
 int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 {
 	// We've got data coming in
@@ -810,17 +815,19 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	return 0;
 }
 
+/*
+ * Waits timeout milliseconds for events to happen on the IRC connection.
+ * Returns 0 if all events have been handled and -1 if an error has been 
+ * encountered or the connection has been lost (check the twirc_state's
+ * connection status to see if the latter is the case). 
+ */
 int twirc_tick(struct twirc_state *s, int timeout)
 {
-	struct epoll_event epev;
-	//struct epoll_event events[TWIRC_MAX_EVENTS];
-	
-	// TODO important: do we need to account for multiple events?
-	// Seeing how we have a user-defined timeout, I would definitely think so!
-	// This means everything the whole event evaluation code has to be run in
-	// a loop, which runs num_events times until all events have been processed!
-	// It also means that we have to decide upon a max_events number (how?).
-	int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
+	//struct epoll_event epev;
+	//int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
+
+	struct epoll_event events[TWIRC_MAX_EVENTS];
+	int num_events = epoll_wait(s->epfd, events, 1, timeout);
 
 	// An error has occured
 	if (num_events == -1)
@@ -836,7 +843,15 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		return 0;
 	}
 
-	return libtwirc_handle_event(s, &epev);
+	//return libtwirc_handle_event(s, &epev);
+
+	int status = 0;
+	for (int i = 0; i < num_events; ++i)
+	{
+		status += libtwirc_handle_event(s, &events[i]);
+	}
+
+	return (status != 0) ? -1 : 0;
 }
 
 /*

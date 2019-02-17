@@ -63,7 +63,7 @@
 // one call to twirc_tick(). I'm honestly not sure how to pick a number here,
 // or what things to even consider. Maybe the timeout between two calls to the
 // aforementioned functions should influence the number of events, too? TODO
-#define TWIRC_MAX_EVENTS 8
+#define TWIRC_MAX_EVENTS 4
 
 struct twirc_state;
 
