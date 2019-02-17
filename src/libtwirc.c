@@ -289,14 +289,17 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 	state->status = TWIRC_STATUS_DISCONNECTED;
 	state->ip_type = TWIRC_IPV4;
 	state->socket_fd = -1;
-	// Initialize the buffer
-	state->buffer = malloc(TWIRC_BUFFER_SIZE * sizeof(char));
+	
+	// Initialize the buffer - it will be twice the message size so it can
+	// easily hold an incomplete message in addition to a complete one
+	state->buffer = malloc(2 * TWIRC_MESSAGE_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
-	// Make sure the structs within state are initialized to 0
+	
+	// Make sure the structs within state are zero-initialized
 	memset(&state->login, 0, sizeof(struct twirc_login));
 	memset(&state->events, 0, sizeof(struct twirc_events));
+
 	// Copy the provided events 
-	//memcpy(&state->events, events, sizeof(struct twirc_events));
 	twirc_set_callbacks(state, events);
 
 	// All done
@@ -671,44 +674,56 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	    |USER MYNAME\r\n\0PASSW|ORD MYPASS\r\n\0|
 	    +----------------------+----------------+
 
-	    -> shift_chunk() 1.1 => "USER MYNAME\r\n\0"
-	    -> shift_chunk() 1.2 => "PASSW\0"
-	    -> shift_chunk() 2.1 => "ORD MYPASS\r\n\0"
+	    -> libtwirc_next_chunk() 1.1 => "USER MYNAME\r\n\0"
+	    -> libtwirc_next_chunk() 1.2 => "PASSW\0"
+	    -> libtwirc_next_chunk() 2.1 => "ORD MYPASS\r\n\0"
 	*/
 
-	char chunk[TWIRC_CHUNK_SIZE];
+	// A chunk has to be able to hold at least as much data as the buffer
+	// we're working on. This means we'll dynamically allocate the chunk 
+	// buffer to the same size as the handed in buffer, plus one to make
+	// room for a null terminator which might not be present in the data
+	// received, but will definitely be added in the chunk.
+
+	char *chunk = malloc(len + 1);
+	fprintf(stderr, ">>> Allocated %zu bytes for the chunk buffer\n", len + 1);
 	chunk[0] = '\0';
 	int off = 0;
 
 	// Here, we'll get one chunk at a time, where a chunk is a part of the
 	// recieved bytes that ends in a null terminator. We'll add all of the 
 	// extracted chunks to the buffer, which might already contain parts of
-	// an incomplete IRC command. TODO we'll need to make sure that the 
-	// buffer is sufficiently big to contain more than one 'delivery' in
-	// case one of them is incomplete, but the next one is (plus brings 
-	// what was missing of the first one).
+	// an incomplete IRC command. The buffer needs to be sufficiently big 
+	// to contain more than one delivery in case one of them is incomplete,
+	// but the next one is complete and adds the missing pieces of the 
+	// previous one.
 
-	while ((off = libtwirc_next_chunk(chunk, TWIRC_CHUNK_SIZE, buf, len, off)) > 0)
+	while ((off = libtwirc_next_chunk(chunk, len + 1, buf, len, off)) > 0)
 	{
 		// Concatenate the current buffer and the newly extracted chunk
 		strcat(state->buffer, chunk);
 	}
 
+	free(chunk);
+
 	// Here, we're lookin at each IRC command in the buffer. We do so by 
 	// getting the string from the beginning of the buffer that ends in 
-	// '\r\n', if any. This string will then be deleted from the buffer. 
+	// '\r\n', if any. This string will then be deleted from the buffer.
 	// We do this repeatedly until we've extracted all complete commands 
 	// from the buffer. If the last bit of the buffer was an incomplete 
 	// command (did not end in '\r\n'), it will be left in the buffer. 
-	// Hopefully, successive recv() calls will bring in the missing 
-	// pieces. If not, we will run into issues...
+	// Hopefully, successive recv() calls will bring in the missing pieces.
+	// If not, we will run into issues, as the buffer could silently and 
+	// slowly fill up until it finally overflows. TODO: test for that?
 	
 	char msg[TWIRC_MESSAGE_SIZE];
 	msg[0] = '\0';
+
 	while (libtwirc_shift_token(msg, state->buffer, "\r\n") > 0)
 	{
 		libtwirc_process_msg(state, msg);
 	}
+	
 	return 0; // TODO
 }
 
