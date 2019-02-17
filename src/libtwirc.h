@@ -61,7 +61,7 @@ struct twirc_events
 
 struct twirc_state
 {
-	int status;                     // connection status
+	int status : 8;                 // connection status
 	int running;                    // are we running in a loop?
 	int ip_type;                    // ip type, ipv4 or ipv6
 	int socket_fd;                  // tcp socket file descriptor
