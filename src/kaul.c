@@ -36,15 +36,18 @@ int read_token(char *buf, size_t len)
  */
 void handle_connect(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "handle_connect()\n");
+	//fprintf(stderr, "handle_connect()\n");
 	twirc_cmd_join(state, "#domsson");
 }
 
 void handle_welcome(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "handle_welcome()\n");
+	//fprintf(stderr, "handle_welcome()\n");
 	twirc_send(state, "CAP REQ :twitch.tv/tags");
+	twirc_cmd_join(state, "#hanryang1125");
 	twirc_cmd_join(state, "#domsson");
+	twirc_cmd_join(state, "#retrogaijin");
+	twirc_cmd_join(state, "#yumyumyu77");
 }
 
 /*
@@ -52,11 +55,16 @@ void handle_welcome(struct twirc_state *state, const char *msg)
  */
 void handle_join(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "handle_join()\n");
+	//fprintf(stderr, "handle_join()\n");
 	if (strstr(msg, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") != NULL)
 	{
-		twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
+		//twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
 	}
+}
+
+void handle_privmsg(struct twirc_state *state, const char *msg)
+{
+	fprintf(stderr, "> %s\n", msg);
 }
 
 /*
@@ -72,7 +80,8 @@ int main(void)
 	struct twirc_events e = { 0 };
 	e.connect = handle_connect;
 	e.welcome = handle_welcome;
-	e.join = handle_join;
+	e.join    = handle_join;
+	e.privmsg = handle_privmsg;
 
 	// CREATE TWIRC INSTANCE
 	struct twirc_state *s = twirc_init(&e);

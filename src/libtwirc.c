@@ -707,7 +707,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 				(*params)[num_tokens++] = strndup(p+from, i-from);
 				// Clear the start position marker
 				from = -1;
-				fprintf(stderr, "__| %s\n", (*params)[num_tokens-1]);
+				//fprintf(stderr, "__| %s\n", (*params)[num_tokens-1]);
 			}
 			continue;
 		}
@@ -722,7 +722,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 				(*params)[num_tokens++] = strndup(p+from, (i+1)-from);
 				// Clear the start position marker
 				from = -1;
-				fprintf(stderr, "__| %s\n", (*params)[num_tokens-1]);
+				//fprintf(stderr, "__| %s\n", (*params)[num_tokens-1]);
 			}
 			continue;
 		}
@@ -754,7 +754,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 // TODO
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 	
 	// Extract the tags, if any
 	struct twirc_tag **tags = NULL;
@@ -776,7 +776,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	char **params = NULL;
 	size_t num_params;
 	msg = libtwirc_parse_params(msg, &params, &num_params);
-	fprintf(stderr, ">>> num_params: %zu\n", num_params);
+	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 	//fprintf(stderr, ">>> params: %s\n", params);
 
 
@@ -816,6 +816,13 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 		if (params[1][0] == 0x01 && params[1][strlen(params[1])-1] == 0x01)
 		{
 			fprintf(stderr, "[!] CTCP detected\n");
+		}
+		else
+		{
+			if (state->events.privmsg != NULL)
+			{
+				state->events.privmsg(state, params[1]);
+			}
 		}
 	}
 
@@ -904,7 +911,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	// We've got data coming in
 	if(epev->events & EPOLLIN)
 	{
-		fprintf(stderr, "*socket ready for reading*\n");
+		//fprintf(stderr, "*socket ready for reading*\n");
 		char buf[TWIRC_BUFFER_SIZE];
 		int bytes_received = 0;
 		while ((bytes_received = twirc_recv(s, buf, TWIRC_BUFFER_SIZE)) > 0)
@@ -916,7 +923,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	// We're ready to send data
 	if (epev->events & EPOLLOUT)
 	{
-		fprintf(stderr, "*socket ready for writing*\n");
+		//fprintf(stderr, "*socket ready for writing*\n");
 		if (s->status & TWIRC_STATUS_CONNECTING)
 		{
 			/*
@@ -994,18 +1001,19 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 }
 
 /*
+ * TODO we probably don't need this - it seems that one single socket (and 
+ * therefore one single file descriptor) never raises more than one event at a
+ * time, so why have code that accounts for multiple events?
+ *
  * Waits timeout milliseconds for events to happen on the IRC connection.
  * Returns 0 if all events have been handled and -1 if an error has been 
  * encountered or the connection has been lost (check the twirc_state's
  * connection status to see if the latter is the case). 
  */
-int twirc_tick(struct twirc_state *s, int timeout)
+int twirc_tick_n(struct twirc_state *s, int timeout)
 {
-	//struct epoll_event epev;
-	//int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
-
 	struct epoll_event events[TWIRC_MAX_EVENTS];
-	int num_events = epoll_wait(s->epfd, events, 1, timeout);
+	int num_events = epoll_wait(s->epfd, events, TWIRC_MAX_EVENTS, timeout);
 
 	// An error has occured
 	if (num_events == -1)
@@ -1021,7 +1029,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		return 0;
 	}
 
-	//return libtwirc_handle_event(s, &epev);
+	//fprintf(stderr, ">>> num_events = %d\n", num_events);
 
 	int status = 0;
 	for (int i = 0; i < num_events; ++i)
@@ -1030,6 +1038,34 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	}
 
 	return (status != 0) ? -1 : 0;
+}
+
+/*
+ * Waits timeout milliseconds for events to happen on the IRC connection.
+ * Returns 0 if all events have been handled and -1 if an error has been 
+ * encountered or the connection has been lost (check the twirc_state's
+ * connection status to see if the latter is the case). 
+ */
+int twirc_tick(struct twirc_state *s, int timeout)
+{
+	struct epoll_event epev;
+	int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
+
+	// An error has occured
+	if (num_events == -1)
+	{
+		fprintf(stderr, "epoll_wait encountered an error\n");
+		s->running = 0;
+		return -1;
+	}
+	
+	// No events have occured
+	if (num_events == 0)
+	{
+		return 0;
+	}
+
+	return libtwirc_handle_event(s, &epev);
 }
 
 /*
