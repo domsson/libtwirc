@@ -672,14 +672,16 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 
 	// Copy everything that's left in msg (params are always last)
 	char *p = strdup(msg);
-	
-	// Now we'll split on spaces until we hit a token that start with ":"
-	char *t;
-	int i;
-	for (i = 0; (t = strtok(i==0 ? p : NULL, " ")) != NULL; ++i)
+
+	size_t p_len = strlen(p);
+	size_t num_tokens = 0;
+	int trailing = 0;
+	int from = -1;
+
+	for (int i = 0; i < p_len; ++i)
 	{
 		// Make sure we have enough space; last element has to be NULL
-		if (i >= num_params - 1)
+		if (num_tokens >= num_params - 1)
 		{
 			size_t add = num_params;
 			num_params += add;
@@ -687,40 +689,63 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 			memset(*params + i + 1, 0, add * sizeof(char*));
 		}
 
-		// It's the trailing (last) parameter, which can include spaces
-		if (t[0] == ':')
+		// Prefix of trailing token (ignore if part of trailing token)
+		if (p[i] == ':' && !trailing)
 		{
-			// TODO there is some serious bug in here! When there
-			// are multiple words in the trailing parameter, it 
-			// works as expected. If the trailing parameter is just
-			// one word, however, we are copying garbage at the end!
-			// Probably because we override the actual END OF msg 
-			// with a space... we'll have to account for this!
-			// IMPORTANT!
-
-			// Revert the space-to-null-terminator conversion that
-			// strtok() performed, so that our strdup() will copy 
-			// everything until the end of msg, not until next " "
-			t[strlen(t)] = ' ';
-
-			// Duplicate this token, but omit the ':' prefix
-			(*params)[i] = strdup(t+1);
-			
-			fprintf(stderr, ">>> PARAM #%d: %s\n", i, (*params)[i]);
-
-			// This was the last parameter, bail out of strtok()
-			break;
+			// Remember that we're in the trailing token
+			trailing = 1;
+			continue;
 		}
-		else
-		{	
-			// Duplicate this token, adding it to params!
-			(*params)[i] = strdup(t);
-			fprintf(stderr, ">>> PARAM #%d: %s\n", i, (*params)[i]);
+
+		// Token separator (ignore if trailing token)
+		if (p[i] == ' ' && !trailing)
+		{
+			// If we've seen the beginning of a token...
+			if (from >= 0)
+			{	
+				// Copy everything from the beginning to here
+				(*params)[num_tokens++] = strndup(p+from, i-from);
+				// Clear the start position marker
+				from = -1;
+				fprintf(stderr, "__| %s\n", (*params)[num_tokens-1]);
+			}
+			continue;
 		}
+
+		// Reached end of parameter string
+		if (i == p_len - 1)
+		{
+			// If we've seen the beginning of a token...
+			if (from >= 0)
+			{
+				// Copy everything from the beginning to here + 1
+				(*params)[num_tokens++] = strndup(p+from, (i+1)-from);
+				// Clear the start position marker
+				from = -1;
+				fprintf(stderr, "__| %s\n", (*params)[num_tokens-1]);
+			}
+			continue;
+		}
+
+		// Start of token
+		if (from == -1)
+		{
+			// Remember this start position
+			from = i;
+		}
+
 	}
 
+	*len = num_tokens;
 	free(p);
-	*len = i + 1;
+
+	// Make sure we only use as much memory as we have to
+	// TODO Figure out if this is actually worth the CPU cycles.
+	//      After all, a couple of pointers don't each much RAM.
+	if (num_tokens < num_params - 1)
+	{
+		*params = realloc(*params, num_tokens * sizeof(char*));
+	}
 
 	// We've reached the end of msg, so we'll return NULL
 	return NULL;
