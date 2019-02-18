@@ -44,10 +44,10 @@ void handle_welcome(struct twirc_state *state, const char *msg)
 {
 	//fprintf(stderr, "handle_welcome()\n");
 	twirc_send(state, "CAP REQ :twitch.tv/tags");
-	twirc_cmd_join(state, "#hanryang1125");
+	//twirc_cmd_join(state, "#hanryang1125");
 	twirc_cmd_join(state, "#domsson");
-	twirc_cmd_join(state, "#retrogaijin");
-	twirc_cmd_join(state, "#yumyumyu77");
+	//twirc_cmd_join(state, "#retrogaijin");
+	//twirc_cmd_join(state, "#yumyumyu77");
 }
 
 /*

@@ -554,13 +554,13 @@ void libtwirc_prefix_to_nick(char *nick, const char *prefix)
  *
  * https://ircv3.net/specs/core/message-tags-3.2.html
  */
-const char *libtwirc_parse_tags(const char *msg, struct twirc_tag **tags, size_t *len)
+const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_t *len)
 {
 	// If msg doesn't start with "@", then there are no tags
 	if (msg[0] != '@')
 	{
 		*len = 0;
-		tags = NULL;
+		*tags = NULL;
 		return msg;
 	}
 
@@ -574,8 +574,8 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag **tags, size_t
 	size_t num_tags = TWIRC_NUM_TAGS;
 	
 	// Allocate memory in the provided pointer to ptr-to-array-of-structs
-	tags = malloc(num_tags * sizeof(struct twirc_tag*));
-	memset(tags, 0, num_tags * sizeof(struct twirc_tag*));
+	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
+	memset(*tags, 0, num_tags * sizeof(struct twirc_tag*));
 
 	char *tag;
 	int i;
@@ -586,8 +586,8 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag **tags, size_t
 		{
 			size_t add = num_tags * 0.5;
 			num_tags += add;
-			tags = realloc(tags, num_tags * sizeof(struct twirc_tag*));
-			memset(tags + i + 1, 0, add * sizeof(struct twirc_tag*));
+			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
+			memset(*tags + i + 1, 0, add * sizeof(struct twirc_tag*));
 		}
 
 		char *eq = strstr(tag, "=");
@@ -595,15 +595,15 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag **tags, size_t
 		// It's a key-only tag
 		if (eq == NULL)
 		{
-			tags[i] = libtwirc_create_tag(tag, NULL);
+			(*tags)[i] = libtwirc_create_tag(tag, NULL);
 		}
 		// It's a tag with key-value pair
 		else
 		{
 			eq[0] = '\0';
-			tags[i] = libtwirc_create_tag(tag, eq+1);
+			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
 		}
-		fprintf(stderr, ">>> TAG %d: %s = %s\n", i, tags[i]->key, tags[i]->value);
+		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
 	}
 
 	// TODO should we re-alloc to use exactly the amount of memory we need
@@ -628,7 +628,7 @@ const char *libtwirc_parse_prefix(const char *msg, char **prefix)
 {
 	if (msg[0] != ':')
 	{
-		prefix = NULL;
+		*prefix = NULL;
 		return msg;
 	}
 	
@@ -655,19 +655,19 @@ const char *libtwirc_parse_command(const char *msg, char **cmd)
 	return next == NULL ? NULL : next + 1;
 }
 
-const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
+const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 {
 	if (msg == NULL)
 	{
 		*len = 0;
-		params = NULL;
+		*params = NULL;
 		return NULL;
 	}
 
 	// Initialize params to hold TWIRC_NUM_PARAMS pointers to char
 	size_t num_params = TWIRC_NUM_PARAMS;
-	params = malloc(num_params * sizeof(char*));
-	memset(params, 0, num_params * sizeof(char*));
+	*params = malloc(num_params * sizeof(char*));
+	memset(*params, 0, num_params * sizeof(char*));
 
 	// Copy everything that's left in msg (params are always last)
 	char *p = strdup(msg);
@@ -677,6 +677,11 @@ const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
 	int trailing = 0;
 	int from = -1;
 
+	// TODO important:
+	//      There is a bug in here where if the trailing parameter has
+	//      only a single character after the colon (example: ":-"), then
+	//      we're not putting that in the array! That's no bueno! Fix it!
+
 	for (int i = 0; i < p_len; ++i)
 	{
 		// Make sure we have enough space; last element has to be NULL
@@ -684,8 +689,8 @@ const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
 		{
 			size_t add = num_params;
 			num_params += add;
-			params = realloc(params, num_params * sizeof(char*));
-			memset(params + i + 1, 0, add * sizeof(char*));
+			*params = realloc(*params, num_params * sizeof(char*));
+			memset(*params + i + 1, 0, add * sizeof(char*));
 		}
 
 		// Prefix of trailing token (ignore if part of trailing token)
@@ -703,7 +708,7 @@ const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
 			if (from >= 0)
 			{	
 				// Copy everything from the beginning to here
-				params[num_tokens++] = strndup(p+from, i-from);
+				(*params)[num_tokens++] = strndup(p+from, i-from);
 				// Clear the start position marker
 				from = -1;
 				//fprintf(stderr, "__| %s\n", params[num_tokens-1]);
@@ -718,7 +723,7 @@ const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
 			if (from >= 0)
 			{
 				// Copy everything from the beginning to here + 1
-				params[num_tokens++] = strndup(p+from, (i+1)-from);
+				(*params)[num_tokens++] = strndup(p+from, (i+1)-from);
 				// Clear the start position marker
 				from = -1;
 				//fprintf(stderr, "__| %s\n", params[num_tokens-1]);
@@ -743,7 +748,7 @@ const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
 	//      After all, a couple of pointers don't each much RAM.
 	if (num_tokens < num_params - 1)
 	{
-		params = realloc(params, num_tokens * sizeof(char*));
+		*params = realloc(*params, num_tokens * sizeof(char*));
 	}
 
 	// We've reached the end of msg, so we'll return NULL
@@ -753,36 +758,33 @@ const char *libtwirc_parse_params(const char *msg, char **params, size_t *len)
 // TODO
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
-	fprintf(stderr, "*** parsing tags ***\n");
 	// Extract the tags, if any
 	struct twirc_tag **tags = NULL;
 	size_t num_tags;
-	msg = libtwirc_parse_tags(msg, tags, &num_tags);
+	msg = libtwirc_parse_tags(msg, &tags, &num_tags);
 	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
-	fprintf(stderr, "*** parsing prefix ***\n");
 	// Extract the prefix, if any
 	char *prefix = NULL;
 	msg = libtwirc_parse_prefix(msg, &prefix);
-	fprintf(stderr, ">>> prefix: %s\n", prefix);
+	//fprintf(stderr, ">>> prefix: %s\n", prefix);
 
-	fprintf(stderr, "*** parsing command ***\n");
 	// Extract the command
 	char *cmd = NULL;
 	msg = libtwirc_parse_command(msg, &cmd);
-	fprintf(stderr, ">>> cmd: %s\n", cmd);
+	//fprintf(stderr, ">>> cmd: %s\n", cmd);
 
-	fprintf(stderr, "*** parsing parameters ***\n");
 	// Extract the parameters, if any
 	char **params = NULL;
 	size_t num_params;
-	msg = libtwirc_parse_params(msg, params, &num_params);
+	msg = libtwirc_parse_params(msg, &params, &num_params);
 	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
-	//fprintf(stderr, ">>> params: %s\n", params);
 
-	fprintf(stderr, "*** handling events ***\n");
+
+	fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu)\n", prefix?"y":"n", cmd, num_tags, num_params);
+
 	// Some temporary test code (the first bit is important tho)
 	if (strcmp(cmd, "001") == 0)
 	{
@@ -828,7 +830,6 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 		}
 	}
 
-	fprintf(stderr, "*** freeing resources ***\n");
 	// Free resources from parsed message
 	libtwirc_free_tags(tags);
 	free(prefix);
