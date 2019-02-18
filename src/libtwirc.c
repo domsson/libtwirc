@@ -554,13 +554,13 @@ void libtwirc_prefix_to_nick(char *nick, const char *prefix)
  *
  * https://ircv3.net/specs/core/message-tags-3.2.html
  */
-const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_t *len)
+const char *libtwirc_parse_tags(const char *msg, struct twirc_tag **tags, size_t *len)
 {
 	// If msg doesn't start with "@", then there are no tags
 	if (msg[0] != '@')
 	{
 		*len = 0;
-		*tags = NULL;
+		tags = NULL;
 		return msg;
 	}
 
@@ -574,8 +574,8 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	size_t num_tags = TWIRC_NUM_TAGS;
 	
 	// Allocate memory in the provided pointer to ptr-to-array-of-structs
-	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
-	memset(*tags, 0, num_tags * sizeof(struct twirc_tag*));
+	tags = malloc(num_tags * sizeof(struct twirc_tag*));
+	memset(tags, 0, num_tags * sizeof(struct twirc_tag*));
 
 	char *tag;
 	int i;
@@ -586,8 +586,8 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 		{
 			size_t add = num_tags * 0.5;
 			num_tags += add;
-			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
-			memset(*tags + i + 1, 0, add * sizeof(struct twirc_tag*));
+			tags = realloc(tags, num_tags * sizeof(struct twirc_tag*));
+			memset(tags + i + 1, 0, add * sizeof(struct twirc_tag*));
 		}
 
 		char *eq = strstr(tag, "=");
@@ -595,14 +595,15 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 		// It's a key-only tag
 		if (eq == NULL)
 		{
-			(*tags)[i] = libtwirc_create_tag(tag, NULL);
+			tags[i] = libtwirc_create_tag(tag, NULL);
 		}
 		// It's a tag with key-value pair
 		else
 		{
 			eq[0] = '\0';
-			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
+			tags[i] = libtwirc_create_tag(tag, eq+1);
 		}
+		fprintf(stderr, ">>> TAG %d: %s = %s\n", i, tags[i]->key, tags[i]->value);
 	}
 
 	// TODO should we re-alloc to use exactly the amount of memory we need
@@ -610,7 +611,7 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	// go with what we have? In other words, CPU vs. memory, which one?
 
 	free(tag_str);
-	*len = i + 1;
+	*len = i;
 
 	// Return a pointer to the remaining part of msg
 	return next + 1;
@@ -759,8 +760,8 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	// Extract the tags, if any
 	struct twirc_tag **tags = NULL;
 	size_t num_tags;
-	msg = libtwirc_parse_tags(msg, &tags, &num_tags);
-	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
+	msg = libtwirc_parse_tags(msg, tags, &num_tags);
+	fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
 	// Extract the prefix, if any
 	char *prefix = NULL;	
@@ -828,6 +829,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 
 	// Free resources from parsed message
 	libtwirc_free_tags(tags);
+	//free(tags);
 	free(prefix);
 	free(cmd);
 	libtwirc_free_params(params);
