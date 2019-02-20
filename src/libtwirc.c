@@ -102,7 +102,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	// TODO take this out later on
 	if (strncmp(msg, "PASS", 4) != 0)
 	{
-		fprintf(stderr, "twirc_send (%zu): %s", strlen(buf), buf);
+		//fprintf(stderr, "twirc_send (%zu): %s", strlen(buf), buf);
 	}
 
 	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
@@ -581,9 +581,15 @@ void libtwirc_free_params(char **params)
 	params = NULL;
 }
 
-void libtwirc_prefix_to_nick(char *nick, const char *prefix)
+char *libtwirc_prefix_to_nick(const char *prefix)
 {
-	// TODO
+	char *sep = strstr(prefix, "!");
+	if (sep == NULL)
+	{
+		return NULL;
+	}
+	size_t len = sep - prefix;
+	return strndup(prefix, len);
 }
 
 
@@ -816,7 +822,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
 	// Extract the prefix, if any
-	msg = libtwirc_parse_prefix(msg, &(message.origin));
+	msg = libtwirc_parse_prefix(msg, &(message.prefix));
 	//fprintf(stderr, ">>> prefix: %s\n", prefix);
 
 	// Extract the command
@@ -828,6 +834,8 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 
 	//fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
+
+	message.nick = libtwirc_prefix_to_nick(message.prefix);
 
 	// Some temporary test code (the first bit is important tho)
 	if (strcmp(message.command, "001") == 0)
@@ -843,7 +851,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	{
 		if (state->events.join != NULL)
 		{
-			//state->events.join(state, "");
+			message.channel = message.params[0];
 			state->events.join(state, &message);
 		}
 
@@ -862,6 +870,8 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	}
 	if (strcmp(message.command, "PRIVMSG") == 0 && message.num_params >= 2)
 	{
+		message.channel = message.params[0];
+
 		if (message.params[1][0] == 0x01 && message.params[1][strlen(message.params[1])-1] == 0x01)
 		{
 			fprintf(stderr, "[!] CTCP detected\n");
@@ -877,7 +887,8 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 
 	// Free resources from parsed message
 	libtwirc_free_tags(message.tags);
-	free(message.origin);
+	free(message.prefix);
+	free(message.nick);
 	free(message.command);
 	libtwirc_free_params(message.params);
 

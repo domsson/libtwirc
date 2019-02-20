@@ -35,53 +35,46 @@ int read_token(char *buf, size_t len)
 /*
  *
  */
-//void handle_connect(struct twirc_state *state, const char *msg)
 void handle_connect(struct twirc_state *state, const struct twirc_message *msg)
 {
-	//fprintf(stderr, "handle_connect()\n");
 	twirc_cmd_join(state, "#domsson");
 }
 
-//void handle_welcome(struct twirc_state *state, const char *msg)
 void handle_welcome(struct twirc_state *state, const struct twirc_message *msg)
 {
-	//fprintf(stderr, "handle_welcome()\n");
 	twirc_send(state, "CAP REQ :twitch.tv/tags");
-	//twirc_cmd_join(state, "#hanryang1125");
+	// Let's join a lot of channels to test this bad boy!
+	twirc_cmd_join(state, "#hanryang1125");
 	twirc_cmd_join(state, "#domsson");
 	twirc_cmd_join(state, "#toborprime");
 	twirc_cmd_join(state, "#honestdangames");
 	twirc_cmd_join(state, "#meowko");
 	twirc_cmd_join(state, "#kitboga");
 	twirc_cmd_join(state, "#bouphe");
-	//twirc_cmd_join(state, "#retrogaijin");
-	//twirc_cmd_join(state, "#yumyumyu77");
+	twirc_cmd_join(state, "#retrogaijin");
+	twirc_cmd_join(state, "#yumyumyu77");
 }
 
 /*
  *
  */
-//void handle_join(struct twirc_state *state, const char *msg)
 void handle_join(struct twirc_state *state, const struct twirc_message *msg)
 {
-	//fprintf(stderr, "handle_join()\n");
-	/*
-	if (strstr(msg, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") != NULL)
+	fprintf(stderr, "*** joined %s\n", msg->params[0]);
+	if (strcmp(msg->prefix, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") == 0
+		&& strcmp(msg->params[0], "#domsson") == 0)
 	{
-		//twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
+		twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
 	}
-	*/
 }
 
-//void handle_privmsg(struct twirc_state *state, const char *msg)
 void handle_privmsg(struct twirc_state *state, const struct twirc_message *msg)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
 	
 	//fprintf(stderr, "[%02d:%02d:%02d] %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg);
-	fprintf(stderr, "[%02d:%02d:%02d] %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg->params[1]);
-	msg->params[1][0] = '\0';
+	fprintf(stderr, "[%02d:%02d:%02d] (%s) %s: %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg->channel, msg->nick, msg->params[1]);
 }
 
 /*

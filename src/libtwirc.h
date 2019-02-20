@@ -98,7 +98,9 @@ struct twirc_tag
 
 struct twirc_message
 {
-	char *origin;
+	char *prefix;
+	char *nick;
+	char *channel;
 	char *command;
 	char **params;
 	size_t num_params;
