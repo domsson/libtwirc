@@ -1062,46 +1062,6 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 }
 
 /*
- * TODO we probably don't need this - it seems that one single socket (and 
- * therefore one single file descriptor) never raises more than one event at a
- * time, so why have code that accounts for multiple events?
- *
- * Waits timeout milliseconds for events to happen on the IRC connection.
- * Returns 0 if all events have been handled and -1 if an error has been 
- * encountered or the connection has been lost (check the twirc_state's
- * connection status to see if the latter is the case). 
- */
-int twirc_tick_n(struct twirc_state *s, int timeout)
-{
-	struct epoll_event events[TWIRC_MAX_EVENTS];
-	int num_events = epoll_wait(s->epfd, events, TWIRC_MAX_EVENTS, timeout);
-
-	// An error has occured
-	if (num_events == -1)
-	{
-		fprintf(stderr, "epoll_wait encountered an error\n");
-		s->running = 0;
-		return -1;
-	}
-	
-	// No events have occured
-	if (num_events == 0)
-	{
-		return 0;
-	}
-
-	//fprintf(stderr, ">>> num_events = %d\n", num_events);
-
-	int status = 0;
-	for (int i = 0; i < num_events; ++i)
-	{
-		status += libtwirc_handle_event(s, &events[i]);
-	}
-
-	return (status != 0) ? -1 : 0;
-}
-
-/*
  * Waits timeout milliseconds for events to happen on the IRC connection.
  * Returns 0 if all events have been handled and -1 if an error has been 
  * encountered or the connection has been lost (check the twirc_state's

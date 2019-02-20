@@ -74,12 +74,6 @@
 // http://www.networksorcery.com/enp/protocol/irc.htm
 #define TWIRC_NUM_PARAMS 4
 
-// This is how many events we can account for in one call to epoll_wait(), or
-// one call to twirc_tick(). I'm honestly not sure how to pick a number here,
-// or what things to even consider. Maybe the timeout between two calls to the
-// aforementioned functions should influence the number of events, too? TODO
-#define TWIRC_MAX_EVENTS 4
-
 struct twirc_state;
 
 struct twirc_login
