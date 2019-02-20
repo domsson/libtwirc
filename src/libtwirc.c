@@ -655,8 +655,10 @@ const char *libtwirc_parse_command(const char *msg, char **cmd)
 	return next == NULL ? NULL : next + 1;
 }
 
-const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
+const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, int *t_idx)
 {
+	*t_idx = -1;
+	
 	if (msg == NULL)
 	{
 		*len = 0;
@@ -670,17 +672,12 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 	memset(*params, 0, num_params * sizeof(char*));
 
 	// Copy everything that's left in msg (params are always last)
-	char *p = strdup(msg);
+	char *p_str = strdup(msg);
 
-	size_t p_len = strlen(p);
+	size_t p_len = strlen(p_str);
 	size_t num_tokens = 0;
 	int trailing = 0;
-	int from = -1;
-
-	// TODO important:
-	//      There is a bug in here where if the trailing parameter has
-	//      only a single character after the colon (example: ":-"), then
-	//      we're not putting that in the array! That's no bueno! Fix it!
+	int from = 0;
 
 	for (int i = 0; i < p_len; ++i)
 	{
@@ -694,54 +691,41 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 		}
 
 		// Prefix of trailing token (ignore if part of trailing token)
-		if (p[i] == ':' && !trailing)
+		if (p_str[i] == ':' && !trailing)
 		{
 			// Remember that we're in the trailing token
 			trailing = 1;
+			// Set the start position marker to the next char
+			from = i+1;
 			continue;
 		}
 
 		// Token separator (ignore if trailing token)
-		if (p[i] == ' ' && !trailing)
+		if (p_str[i] == ' ' && !trailing)
 		{
-			// If we've seen the beginning of a token...
-			if (from >= 0)
-			{	
-				// Copy everything from the beginning to here
-				(*params)[num_tokens++] = strndup(p+from, i-from);
-				// Clear the start position marker
-				from = -1;
-				//fprintf(stderr, "__| %s\n", params[num_tokens-1]);
-			}
+			// Copy everything from the beginning to here
+			(*params)[num_tokens++] = strndup(p_str + from, i - from);
+			//fprintf(stderr, "- %s\n", (*params)[num_tokens-1]);
+			// Set the start position marker to the next char
+			from = i+1;
 			continue;
 		}
 
-		// Reached end of parameter string
+		// We're at the last character (null terminator, hopefully)
 		if (i == p_len - 1)
 		{
-			// If we've seen the beginning of a token...
-			if (from >= 0)
+			if (trailing)
 			{
-				// Copy everything from the beginning to here + 1
-				(*params)[num_tokens++] = strndup(p+from, (i+1)-from);
-				// Clear the start position marker
-				from = -1;
-				//fprintf(stderr, "__| %s\n", params[num_tokens-1]);
+				*t_idx = num_tokens;
 			}
-			continue;
+			// Copy everything from the beginning to here + 1
+			(*params)[num_tokens++] = strndup(p_str + from, (i + 1) - from);
+			//fprintf(stderr, "- %s\n", (*params)[num_tokens-1]);
 		}
-
-		// Start of token
-		if (from == -1)
-		{
-			// Remember this start position
-			from = i;
-		}
-
 	}
 
 	*len = num_tokens;
-	free(p);
+	free(p_str);
 
 	// Make sure we only use as much memory as we have to
 	// TODO Figure out if this is actually worth the CPU cycles.
@@ -758,7 +742,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len)
 // TODO
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
 	// Extract the tags, if any
 	struct twirc_tag **tags = NULL;
@@ -779,11 +763,12 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	// Extract the parameters, if any
 	char **params = NULL;
 	size_t num_params;
-	msg = libtwirc_parse_params(msg, &params, &num_params);
+	int trail_idx;
+	msg = libtwirc_parse_params(msg, &params, &num_params, &trail_idx);
 	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 
 
-	fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu)\n", prefix?"y":"n", cmd, num_tags, num_params);
+	fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
 
 	// Some temporary test code (the first bit is important tho)
 	if (strcmp(cmd, "001") == 0)
