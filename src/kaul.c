@@ -3,6 +3,7 @@
 #include <string.h>     //
 #include <errno.h>      // errno
 #include <sys/types.h>  // ssize_t
+#include <time.h>
 #include "libtwirc.h"
 
 /*
@@ -34,18 +35,25 @@ int read_token(char *buf, size_t len)
 /*
  *
  */
-void handle_connect(struct twirc_state *state, const char *msg)
+//void handle_connect(struct twirc_state *state, const char *msg)
+void handle_connect(struct twirc_state *state, const struct twirc_message *msg)
 {
 	//fprintf(stderr, "handle_connect()\n");
 	twirc_cmd_join(state, "#domsson");
 }
 
-void handle_welcome(struct twirc_state *state, const char *msg)
+//void handle_welcome(struct twirc_state *state, const char *msg)
+void handle_welcome(struct twirc_state *state, const struct twirc_message *msg)
 {
 	//fprintf(stderr, "handle_welcome()\n");
 	twirc_send(state, "CAP REQ :twitch.tv/tags");
 	//twirc_cmd_join(state, "#hanryang1125");
 	twirc_cmd_join(state, "#domsson");
+	twirc_cmd_join(state, "#toborprime");
+	twirc_cmd_join(state, "#honestdangames");
+	twirc_cmd_join(state, "#meowko");
+	twirc_cmd_join(state, "#kitboga");
+	twirc_cmd_join(state, "#bouphe");
 	//twirc_cmd_join(state, "#retrogaijin");
 	//twirc_cmd_join(state, "#yumyumyu77");
 }
@@ -53,18 +61,27 @@ void handle_welcome(struct twirc_state *state, const char *msg)
 /*
  *
  */
-void handle_join(struct twirc_state *state, const char *msg)
+//void handle_join(struct twirc_state *state, const char *msg)
+void handle_join(struct twirc_state *state, const struct twirc_message *msg)
 {
 	//fprintf(stderr, "handle_join()\n");
+	/*
 	if (strstr(msg, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") != NULL)
 	{
 		//twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
 	}
+	*/
 }
 
-void handle_privmsg(struct twirc_state *state, const char *msg)
+//void handle_privmsg(struct twirc_state *state, const char *msg)
+void handle_privmsg(struct twirc_state *state, const struct twirc_message *msg)
 {
-	fprintf(stderr, "> %s\n", msg);
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+	
+	//fprintf(stderr, "[%02d:%02d:%02d] %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg);
+	fprintf(stderr, "[%02d:%02d:%02d] %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg->params[1]);
+	msg->params[1][0] = '\0';
 }
 
 /*

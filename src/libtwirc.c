@@ -102,7 +102,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	// TODO take this out later on
 	if (strncmp(msg, "PASS", 4) != 0)
 	{
-		fprintf(stderr, "twirc_send (%zu): %s\n", strlen(buf), buf);
+		fprintf(stderr, "twirc_send (%zu): %s", strlen(buf), buf);
 	}
 
 	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
@@ -490,11 +490,58 @@ char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 	return sep_pos + strlen(sep);
 }
 
+char *libtwirc_unescape_tag(const char *val)
+{
+	size_t val_len = strlen(val);
+	char *escaped = malloc((val_len + 1) * sizeof(char));
+	
+	int e = 0;
+	for (int i = 0; i < (int) val_len - 1; ++i)
+	{
+		if (val[i] == '\\')
+		{
+			if (val[i+1] == ':') // "\:" -> ";"
+			{
+				escaped[e++] = ';';
+				++i;
+				continue;
+			}
+			if (val[i+1] == 's') // "\s" -> " ";
+			{
+				escaped[e++] = ' ';
+				++i;
+				continue;
+			}
+			if (val[i+1] == '\\') // "\\" -> "\";
+			{
+				escaped[e++] = '\\';
+				++i;
+				continue;
+			}
+			if (val[i+1] == 'r') // "\r" -> '\r' (CR)
+			{
+				escaped[e++] = '\r';
+				++i;
+				continue;
+			}
+			if (val[i+1] == 'n') // "\n" -> '\n' (LF)
+			{
+				escaped[e++] = '\n';
+				++i;
+				continue;
+			}
+		}
+		escaped[e++] = val[i];
+	}
+	escaped[e] = '\0';
+	return escaped;
+}
+
 struct twirc_tag *libtwirc_create_tag(const char *key, const char *val)
 {
 	struct twirc_tag *tag = malloc(sizeof(struct twirc_tag));
-	tag->key   = key ? strdup(key) : NULL;
-	tag->value = val ? strdup(val) : NULL;
+	tag->key   = strdup(key);
+	tag->value = libtwirc_unescape_tag(val);
 	return tag;
 }
 
@@ -539,6 +586,7 @@ void libtwirc_prefix_to_nick(char *nick, const char *prefix)
 	// TODO
 }
 
+
 /*
  * Extracts tags from the beginning of an IRC message, if any, and returns them
  * as a pointer to a dynamically allocated array of twirc_tag structs, where 
@@ -575,7 +623,7 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	
 	// Allocate memory in the provided pointer to ptr-to-array-of-structs
 	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
-	memset(*tags, 0, num_tags * sizeof(struct twirc_tag*));
+	//memset(*tags, 0, num_tags * sizeof(struct twirc_tag*));
 
 	char *tag;
 	int i;
@@ -587,15 +635,21 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 			size_t add = num_tags * 0.5;
 			num_tags += add;
 			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
-			memset(*tags + i + 1, 0, add * sizeof(struct twirc_tag*));
+			//memset(*tags + i + 1, 0, add * sizeof(struct twirc_tag*));
 		}
 
 		char *eq = strstr(tag, "=");
 		
-		// It's a key-only tag
-		if (eq == NULL)
+		// TODO there is a bug in here! when eq is NOT null (meaning there is
+		// an equals sign in there, BUT it's a key-only tag, meaning there is
+		// a null terminator just after the '=', then we actually end up with
+		// the '=' attached to the key name in the tag! we need to strip it!
+
+		// It's a key-only tag, for example "tagname" or "tagname="
+		// So either we didn't find an '=' or the next char is '\0'
+		if (eq == NULL || eq[1] == '\0')
 		{
-			(*tags)[i] = libtwirc_create_tag(tag, NULL);
+			(*tags)[i] = libtwirc_create_tag(tag, eq == NULL ? "" : eq+1);
 		}
 		// It's a tag with key-value pair
 		else
@@ -606,12 +660,21 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
 	}
 
+	// Set the number of tags found
+	*len = i;
+
+	free(tag_str);
+	
 	// TODO should we re-alloc to use exactly the amount of memory we need
 	// for the number of tags extracted (i), or would it be faster to just
 	// go with what we have? In other words, CPU vs. memory, which one?
+	if (i < num_tags - 1)
+	{
+		*tags = realloc(*tags, (i + 1) * sizeof(struct twirc_tag*));
+	}
 
-	free(tag_str);
-	*len = i;
+	// Make sure the last element is a NULL ptr
+	(*tags)[i] = NULL;
 
 	// Return a pointer to the remaining part of msg
 	return next + 1;
@@ -657,10 +720,9 @@ const char *libtwirc_parse_command(const char *msg, char **cmd)
 
 const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, int *t_idx)
 {
-	*t_idx = -1;
-	
 	if (msg == NULL)
 	{
+		*t_idx = -1;
 		*len = 0;
 		*params = NULL;
 		return NULL;
@@ -669,7 +731,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 	// Initialize params to hold TWIRC_NUM_PARAMS pointers to char
 	size_t num_params = TWIRC_NUM_PARAMS;
 	*params = malloc(num_params * sizeof(char*));
-	memset(*params, 0, num_params * sizeof(char*));
+	//memset(*params, 0, num_params * sizeof(char*));
 
 	// Copy everything that's left in msg (params are always last)
 	char *p_str = strdup(msg);
@@ -687,7 +749,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 			size_t add = num_params;
 			num_params += add;
 			*params = realloc(*params, num_params * sizeof(char*));
-			memset(*params + i + 1, 0, add * sizeof(char*));
+			//memset(*params + i + 1, 0, add * sizeof(char*));
 		}
 
 		// Prefix of trailing token (ignore if part of trailing token)
@@ -714,17 +776,17 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 		// We're at the last character (null terminator, hopefully)
 		if (i == p_len - 1)
 		{
-			if (trailing)
-			{
-				*t_idx = num_tokens;
-			}
 			// Copy everything from the beginning to here + 1
 			(*params)[num_tokens++] = strndup(p_str + from, (i + 1) - from);
 			//fprintf(stderr, "- %s\n", (*params)[num_tokens-1]);
 		}
 	}
 
+	// Set index of the trailing parameter, if any, otherwise -1
+	*t_idx = trailing ? num_tokens - 1 : -1;
+	// Set number of tokens (parameters) found and copied
 	*len = num_tokens;
+	
 	free(p_str);
 
 	// Make sure we only use as much memory as we have to
@@ -732,8 +794,11 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 	//      After all, a couple of pointers don't each much RAM.
 	if (num_tokens < num_params - 1)
 	{
-		*params = realloc(*params, num_tokens * sizeof(char*));
+		*params = realloc(*params, (num_tokens + 1) * sizeof(char*));
 	}
+	
+	// Make sure the last element is a NULL ptr
+	(*params)[num_tokens] = NULL;
 
 	// We've reached the end of msg, so we'll return NULL
 	return NULL;
@@ -742,67 +807,81 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 // TODO
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+
+	struct twirc_message message = { 0 };
 
 	// Extract the tags, if any
-	struct twirc_tag **tags = NULL;
-	size_t num_tags;
-	msg = libtwirc_parse_tags(msg, &tags, &num_tags);
+	//struct twirc_tag **tags = NULL;
+	//size_t num_tags;
+	//msg = libtwirc_parse_tags(msg, &tags, &num_tags);
+	msg = libtwirc_parse_tags(msg, &(message.tags), &(message.num_tags));
 	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
 	// Extract the prefix, if any
-	char *prefix = NULL;
-	msg = libtwirc_parse_prefix(msg, &prefix);
+	//char *prefix = NULL;
+	//msg = libtwirc_parse_prefix(msg, &prefix);
+	msg = libtwirc_parse_prefix(msg, &(message.origin));
 	//fprintf(stderr, ">>> prefix: %s\n", prefix);
 
 	// Extract the command
-	char *cmd = NULL;
-	msg = libtwirc_parse_command(msg, &cmd);
+	//char *cmd = NULL;
+	//msg = libtwirc_parse_command(msg, &cmd);
+	msg = libtwirc_parse_command(msg, &(message.command));
 	//fprintf(stderr, ">>> cmd: %s\n", cmd);
 
 	// Extract the parameters, if any
-	char **params = NULL;
-	size_t num_params;
-	int trail_idx;
-	msg = libtwirc_parse_params(msg, &params, &num_params, &trail_idx);
+	//char **params = NULL;
+	//size_t num_params;
+	//int trail_idx;
+	//msg = libtwirc_parse_params(msg, &params, &num_params, &trail_idx);
+	msg = libtwirc_parse_params(msg, &(message.params), &(message.num_params), &(message.trailing));
 	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 
-
-	fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
+	//fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
 
 	// Some temporary test code (the first bit is important tho)
-	if (strcmp(cmd, "001") == 0)
+	//if (strcmp(cmd, "001") == 0)
+	if (strcmp(message.command, "001") == 0)
 	{
 		state->status |= TWIRC_STATUS_AUTHENTICATED;
 		if (state->events.welcome != NULL)
 		{
-			state->events.welcome(state, "");
+			//state->events.welcome(state, "");
+			state->events.welcome(state, &message);
 		}
 
 	}
-	if (strcmp(cmd, "JOIN") == 0)
+	//if (strcmp(cmd, "JOIN") == 0)
+	if (strcmp(message.command, "JOIN") == 0)
 	{
 		if (state->events.join != NULL)
 		{
-			state->events.join(state, "");
+			//state->events.join(state, "");
+			state->events.join(state, &message);
 		}
 
 	}
-	if (strcmp(cmd, "PING") == 0)
+	//if (strcmp(cmd, "PING") == 0)
+	if (strcmp(message.command, "PING") == 0)
 	{
 		char pong[128];
 		pong[0] = '\0';
-		snprintf(pong, 128, "PONG %s", params[0]);
+		//snprintf(pong, 128, "PONG %s", params[0]);
+		snprintf(pong, 128, "PONG %s", message.params[0]);
 
 		twirc_send(state, pong);
 		if (state->events.ping != NULL)
 		{
-			state->events.ping(state, "");
+			//state->events.ping(state, "");
+			state->events.ping(state, &message);
 		}
 	}
-	if (strcmp(cmd, "PRIVMSG") == 0 && num_params >= 2)
+	//if (strcmp(cmd, "PRIVMSG") == 0 && num_params >= 2)
+	if (strcmp(message.command, "PRIVMSG") == 0 && message.num_params >= 2)
 	{
-		if (params[1][0] == 0x01 && params[1][strlen(params[1])-1] == 0x01)
+		//if (params[1][0] == 0x01 && params[1][strlen(params[1])-1] == 0x01)
+		if (message.params[1][0] == 0x01 && message.params[1][strlen(message.params[1])-1] == 0x01)
 		{
 			fprintf(stderr, "[!] CTCP detected\n");
 		}
@@ -810,16 +889,21 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 		{
 			if (state->events.privmsg != NULL)
 			{
-				state->events.privmsg(state, params[1]);
+				//state->events.privmsg(state, params[1]);
+				state->events.privmsg(state, &message);
 			}
 		}
 	}
 
 	// Free resources from parsed message
-	libtwirc_free_tags(tags);
-	free(prefix);
-	free(cmd);
-	libtwirc_free_params(params);
+	//libtwirc_free_tags(tags);
+	//free(prefix);
+	//free(cmd);
+	//libtwirc_free_params(params);
+	libtwirc_free_tags(message.tags);
+	free(message.origin);
+	free(message.command);
+	libtwirc_free_params(message.params);
 
 	return 0; // TODO
 }
@@ -945,7 +1029,8 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 			s->status = TWIRC_STATUS_CONNECTED;
 			if (s->events.connect != NULL)
 			{
-				s->events.connect(s, "");
+				//s->events.connect(s, "");
+				s->events.connect(s, NULL);
 			}
 		}
 		if (s->status & TWIRC_STATUS_CONNECTED)

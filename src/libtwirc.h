@@ -90,12 +90,29 @@ struct twirc_login
 	char *pass;
 };
 
+struct twirc_tag
+{
+	char *key;
+	char *value;
+};
+
+struct twirc_message
+{
+	char *origin;
+	char *command;
+	char **params;
+	size_t num_params;
+	int trailing;
+	struct twirc_tag **tags;
+	size_t num_tags;
+};
+
 // <message> ::= ['@' <tags> <SPACE>] [':' <prefix> <SPACE> ] <command> <params> <crlf>
 // Also, we might want to extract "nick" and "chan" from params, as these two will be in
 // there pretty often - and most likely relevant for the user.
 //
 // (struct twirc_state *s, const char *cmd, const struct twirc_tag **tags, const char *prefix, const char **params) 
-typedef void (*twirc_event)(struct twirc_state *s, const char *msg);
+typedef void (*twirc_event)(struct twirc_state *s, const struct twirc_message *msg);
 
 struct twirc_events
 {
@@ -127,12 +144,6 @@ struct twirc_state
 	struct twirc_login login;       // irc login data 
 	struct twirc_events events;     // event callbacks
 	int epfd;                       // epoll file descriptor
-};
-
-struct twirc_tag
-{
-	char *key;
-	char *value;
 };
 
 struct twirc_state* twirc_init(struct twirc_events *e);
