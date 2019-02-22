@@ -32,27 +32,39 @@ int read_token(char *buf, size_t len)
 	return 1;
 }
 
+void handle_ping(struct twirc_state *state, const struct twirc_message *msg)
+{
+	fprintf(stdout, "*** received PING: %s\n", msg->params[0]);
+}
+
 /*
  *
  */
 void handle_connect(struct twirc_state *state, const struct twirc_message *msg)
 {
-	twirc_cmd_join(state, "#domsson");
+	fprintf(stdout, "*** connected!\n");
 }
 
+/*
+ *
+ */
 void handle_welcome(struct twirc_state *state, const struct twirc_message *msg)
 {
-	twirc_send(state, "CAP REQ :twitch.tv/tags");
 	// Let's join a lot of channels to test this bad boy!
+	//twirc_cmd_join(state, "#domsson");
+/*
 	twirc_cmd_join(state, "#hanryang1125");
-	twirc_cmd_join(state, "#domsson");
 	twirc_cmd_join(state, "#toborprime");
 	twirc_cmd_join(state, "#honestdangames");
 	twirc_cmd_join(state, "#meowko");
 	twirc_cmd_join(state, "#kitboga");
+	twirc_cmd_join(state, "#hyubsama");
+	twirc_cmd_join(state, "#bawnsai");
 	twirc_cmd_join(state, "#bouphe");
 	twirc_cmd_join(state, "#retrogaijin");
 	twirc_cmd_join(state, "#yumyumyu77");
+	twirc_cmd_join(state, "#esl_csgo");
+*/
 }
 
 /*
@@ -60,7 +72,7 @@ void handle_welcome(struct twirc_state *state, const struct twirc_message *msg)
  */
 void handle_join(struct twirc_state *state, const struct twirc_message *msg)
 {
-	fprintf(stderr, "*** joined %s\n", msg->params[0]);
+	fprintf(stdout, "*** joined %s\n", msg->params[0]);
 	if (strcmp(msg->prefix, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") == 0
 		&& strcmp(msg->params[0], "#domsson") == 0)
 	{
@@ -73,8 +85,7 @@ void handle_privmsg(struct twirc_state *state, const struct twirc_message *msg)
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
 	
-	//fprintf(stderr, "[%02d:%02d:%02d] %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg);
-	fprintf(stderr, "[%02d:%02d:%02d] (%s) %s: %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg->channel, msg->nick, msg->params[1]);
+	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg->channel, msg->nick, msg->params[1]);
 }
 
 /*

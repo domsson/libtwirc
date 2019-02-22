@@ -50,15 +50,6 @@ int twirc_connect(struct twirc_state *state, const char *host, const char *port,
 		return -5;
 	}
 
-	// fprintf(stderr, "Socket registered for IO...\n");
-
-	// Check the required buffer size for recv() as reported by getsockopt()
-	// TODO take this out later
-	size_t n = 0;
-	socklen_t m = sizeof(n);
-	getsockopt(state->socket_fd, SOL_SOCKET, SO_RCVBUF, (void *)&n, &m);
-	fprintf(stderr, "recv() wants a buffer of size %zu bytes\n", n);
-
 	// Properly initialize the login struct and copy the login data into it
 	state->login.host = strdup(host);
 	state->login.port = strdup(port);
@@ -99,11 +90,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	buf[msg_len+1] = '\n';
 	buf[msg_len+2] = '\0';
 
-	// TODO take this out later on
-	if (strncmp(msg, "PASS", 4) != 0)
-	{
-		//fprintf(stderr, "twirc_send (%zu): %s", strlen(buf), buf);
-	}
+	fprintf(stderr, "< %s", buf);
 
 	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
 	free(buf);
@@ -216,6 +203,21 @@ int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *m
 	return twirc_send(state, msg);
 }
 
+int twirc_cmd_req_tags(struct twirc_state *state)
+{
+	return twirc_send(state, "CAP REQ :twitch.tv/tags");
+}
+
+int twirc_cmd_req_membership(struct twirc_state *state)
+{
+	return twirc_send(state, "CAP REQ :twitch.tv/membership");
+}
+
+int twirc_cmd_req_commands(struct twirc_state *state)
+{
+	return twirc_send(state, "CAP REQ :twitch.tv/commands");
+}
+
 /*
  * Sends the PONG command to the IRC server.
  * Returns 0 on success, -1 otherwise.
@@ -238,7 +240,10 @@ int twirc_cmd_quit(struct twirc_state *state)
 /*
  * Authenticates with the Twitch Server using the NICK and PASS commands.
  * You are not automatically authenticated when this function returns,
- * you need to wait for the server's reply (MOTD) first.
+ * you need to wait for the server's reply first. If the tags capability 
+ * has been requested and acknoweldged before, the server will confirm 
+ * login (authentication) with the GLOBALUSERSTATE command, otherwise we
+ * can just look out for the MOTD (starting with numeric command 001).
  * Returns 0 if both commands were send successfully, -1 on error.
  * TODO: See if we can't send both commands in one - what's better?
  */
@@ -261,7 +266,6 @@ int twirc_auth(struct twirc_state *state)
  */ 
 int twirc_disconnect(struct twirc_state *state)
 {
-	fprintf(stderr, "Disconnecting...\n");
 	twirc_cmd_quit(state);
 	int ret = stcpnb_close(state->socket_fd);
 	state->status = TWIRC_STATUS_DISCONNECTED;
@@ -281,6 +285,10 @@ void twirc_set_callbacks(struct twirc_state *state, struct twirc_events *events)
  */
 struct twirc_state* twirc_init(struct twirc_events *events)
 {
+	// TODO something in here leaks! I'm not sure what, the line numbers
+	// given by valgrind were comments, so it wasn't really accurate, but
+	// let's just carefully check everything in here, ya? cheers
+	
 	// Init state struct
 	struct twirc_state *state = malloc(sizeof(struct twirc_state));
 	memset(state, 0, sizeof(struct twirc_state));
@@ -581,6 +589,13 @@ void libtwirc_free_params(char **params)
 	params = NULL;
 }
 
+/*
+ * Extracts the nickname from an IRC message's prefix, if any. Done this way:
+ * Searches prefix for an exclamation mark ('!'). If there is one, everything 
+ * before it will be returned as a pointer to an allocated string (malloc), so
+ * the caller has to free() it at some point. If there is no exclamation mark 
+ * in prefix, NULL will be returned. If prefix is NULL, a segfault will occur.
+ */
 char *libtwirc_prefix_to_nick(const char *prefix)
 {
 	char *sep = strstr(prefix, "!");
@@ -629,7 +644,6 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	
 	// Allocate memory in the provided pointer to ptr-to-array-of-structs
 	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
-	//memset(*tags, 0, num_tags * sizeof(struct twirc_tag*));
 
 	char *tag;
 	int i;
@@ -641,7 +655,6 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 			size_t add = num_tags * 0.5;
 			num_tags += add;
 			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
-			//memset(*tags + i + 1, 0, add * sizeof(struct twirc_tag*));
 		}
 
 		char *eq = strstr(tag, "=");
@@ -737,7 +750,6 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 	// Initialize params to hold TWIRC_NUM_PARAMS pointers to char
 	size_t num_params = TWIRC_NUM_PARAMS;
 	*params = malloc(num_params * sizeof(char*));
-	//memset(*params, 0, num_params * sizeof(char*));
 
 	// Copy everything that's left in msg (params are always last)
 	char *p_str = strdup(msg);
@@ -755,7 +767,6 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 			size_t add = num_params;
 			num_params += add;
 			*params = realloc(*params, num_params * sizeof(char*));
-			//memset(*params + i + 1, 0, add * sizeof(char*));
 		}
 
 		// Prefix of trailing token (ignore if part of trailing token)
@@ -813,7 +824,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 // TODO
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
-	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
 	struct twirc_message message = { 0 };
 
@@ -835,7 +846,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 
 	//fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
 
-	message.nick = libtwirc_prefix_to_nick(message.prefix);
+	message.nick = message.prefix == NULL ? NULL : libtwirc_prefix_to_nick(message.prefix);
 
 	// Some temporary test code (the first bit is important tho)
 	if (strcmp(message.command, "001") == 0)
@@ -874,7 +885,8 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 
 		if (message.params[1][0] == 0x01 && message.params[1][strlen(message.params[1])-1] == 0x01)
 		{
-			fprintf(stderr, "[!] CTCP detected\n");
+			// TODO deal with CTCP
+			//fprintf(stderr, "[!] CTCP detected\n");
 		}
 		else
 		{
@@ -962,6 +974,37 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	return 0; // TODO
 }
 
+int twirc_capreq(struct twirc_state *s)
+{
+	return twirc_send(s, "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
+}
+
+int libtwirc_evt_connect(struct twirc_state *s)
+{
+	// Start authentication process
+	if (s->status & TWIRC_STATUS_AUTHENTICATING)
+	{
+		// Authentication has already been initialized!
+		return -1;
+	}
+	if (s->status & TWIRC_STATUS_AUTHENTICATED)
+	{
+		// Already authenticated!
+		return -1;
+	}
+
+	// Request capabilities already, so that we'll received the
+	// GLOBALUSERSTATE command once we're logged in, which seems
+	// a cleaner way to check for login than to use the MOTD
+	fprintf(stderr, "Requesting capabilities...\n");
+	twirc_capreq(s);
+
+	fprintf(stderr, "Authenticating...\n");
+	twirc_auth(s);
+	s->status |= TWIRC_STATUS_AUTHENTICATING;
+	return 0;
+}
+
 /*
  * Handles the epoll event epev.
  * Returns 0 on success, -1 if the connection has been interrupted.
@@ -972,6 +1015,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	if(epev->events & EPOLLIN)
 	{
 		//fprintf(stderr, "*socket ready for reading*\n");
+		
 		char buf[TWIRC_BUFFER_SIZE];
 		int bytes_received = 0;
 		while ((bytes_received = twirc_recv(s, buf, TWIRC_BUFFER_SIZE)) > 0)
@@ -984,49 +1028,27 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	if (epev->events & EPOLLOUT)
 	{
 		//fprintf(stderr, "*socket ready for writing*\n");
+
+		// If we weren't connected yet, we seem to be now!
 		if (s->status & TWIRC_STATUS_CONNECTING)
 		{
-			/*
-			// TODO: do we really need to ask stcpnb_status()?
-			// When the socket is ready for writing after we made
-			// a connection attempt, can't we assume that we are
-			// now connected to the server?
-
-			int conn_status = stcpnb_status(s->socket_fd);
-			if (conn_status == 0)
-			{
-				fprintf(stderr, "Looks like we're connected!\n");
-				s->status = TWIRC_STATUS_CONNECTED;
-				if (s->events.connect != NULL)
-				{
-					s->events.connect(s, "");
-				}
-			}
-			if (conn_status == -1)
-			{
-				fprintf(stderr, "Socket not ready (yet)\n");
-			}
-			if (conn_status == -2)
-			{
-				fprintf(stderr, "Could not get socket status\n");
-			}
-			*/
-
-			fprintf(stderr, "Connection established!\n");
+			//fprintf(stderr, "Connection established!\n");
+			
+			// Set status to connected (discarding all other flags)
 			s->status = TWIRC_STATUS_CONNECTED;
+			
+			// Call Internal connect event handler
+			// It's supposed to request capabilities and 
+			// initiate the login (user authentication)
+			libtwirc_evt_connect(s);
+
+			// Call user's connect event handler
+			// Although I don't see what the user would want to do 
+			// on connect; the welcome event, which is dispatched 
+			// once authentication has happened, is way more useful
 			if (s->events.connect != NULL)
 			{
-				//s->events.connect(s, "");
 				s->events.connect(s, NULL);
-			}
-		}
-		if (s->status & TWIRC_STATUS_CONNECTED)
-		{
-			if ((s->status & TWIRC_STATUS_AUTHENTICATED) == 0)
-			{
-				fprintf(stderr, "Authenticating...\n");
-				twirc_auth(s);
-				s->status |= TWIRC_STATUS_AUTHENTICATING;
 			}
 		}
 	}
