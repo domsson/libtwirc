@@ -32,15 +32,15 @@ int read_token(char *buf, size_t len)
 	return 1;
 }
 
-void handle_ping(struct twirc_state *state, const struct twirc_message *msg)
+void handle_ping(struct twirc_state *s, const struct twirc_event *evt)
 {
-	fprintf(stdout, "*** received PING: %s\n", msg->params[0]);
+	fprintf(stdout, "*** received PING: %s\n", evt->params[0]);
 }
 
 /*
  *
  */
-void handle_connect(struct twirc_state *state, const struct twirc_message *msg)
+void handle_connect(struct twirc_state *s, const struct twirc_event *evt)
 {
 	fprintf(stdout, "*** connected!\n");
 }
@@ -48,44 +48,46 @@ void handle_connect(struct twirc_state *state, const struct twirc_message *msg)
 /*
  *
  */
-void handle_welcome(struct twirc_state *state, const struct twirc_message *msg)
+void handle_welcome(struct twirc_state *s, const struct twirc_event *evt)
 {
 	// Let's join a lot of channels to test this bad boy!
-	//twirc_cmd_join(state, "#domsson");
+	twirc_cmd_join(s, "#domsson");
 /*
-	twirc_cmd_join(state, "#hanryang1125");
-	twirc_cmd_join(state, "#toborprime");
-	twirc_cmd_join(state, "#honestdangames");
-	twirc_cmd_join(state, "#meowko");
-	twirc_cmd_join(state, "#kitboga");
-	twirc_cmd_join(state, "#hyubsama");
-	twirc_cmd_join(state, "#bawnsai");
-	twirc_cmd_join(state, "#bouphe");
-	twirc_cmd_join(state, "#retrogaijin");
-	twirc_cmd_join(state, "#yumyumyu77");
-	twirc_cmd_join(state, "#esl_csgo");
+	twirc_cmd_join(s, "#hanryang1125");
+	twirc_cmd_join(s, "#toborprime");
+	twirc_cmd_join(s, "#honestdangames");
+	twirc_cmd_join(s, "#meowko");
+	twirc_cmd_join(s, "#kitboga");
+	twirc_cmd_join(s, "#hyubsama");
+	twirc_cmd_join(s, "#bawnsai");
+	twirc_cmd_join(s, "#bouphe");
+	twirc_cmd_join(s, "#retrogaijin");
+	twirc_cmd_join(s, "#yumyumyu77");
+	twirc_cmd_join(s, "#esl_csgo");
 */
 }
 
 /*
  *
  */
-void handle_join(struct twirc_state *state, const struct twirc_message *msg)
+void handle_join(struct twirc_state *s, const struct twirc_event *evt)
 {
-	fprintf(stdout, "*** joined %s\n", msg->params[0]);
-	if (strcmp(msg->prefix, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") == 0
-		&& strcmp(msg->params[0], "#domsson") == 0)
+	fprintf(stdout, "*** joined %s\n", evt->params[0]);
+	if (strcmp(evt->prefix, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") == 0
+		&& strcmp(evt->params[0], "#domsson") == 0)
 	{
-		twirc_cmd_privmsg(state, "#domsson", "jobruce is the best!");
+		twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
 	}
 }
 
-void handle_privmsg(struct twirc_state *state, const struct twirc_message *msg)
+void handle_privmsg(struct twirc_state *s, const struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
 	
-	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, msg->channel, msg->nick, msg->params[1]);
+	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", 
+			tm.tm_hour, tm.tm_min, tm.tm_sec, 
+			evt->channel, evt->nick, evt->params[1]);
 }
 
 /*
@@ -98,14 +100,14 @@ int main(void)
 		TWIRC_NAME, TWIRC_VER_MAJOR, TWIRC_VER_MINOR, TWIRC_VER_BUILD);
 
 	// SET UP CALLBACKS
-	struct twirc_events e = { 0 };
-	e.connect = handle_connect;
-	e.welcome = handle_welcome;
-	e.join    = handle_join;
-	e.privmsg = handle_privmsg;
+	struct twirc_callbacks cbs = { 0 };
+	cbs.connect = handle_connect;
+	cbs.welcome = handle_welcome;
+	cbs.join    = handle_join;
+	cbs.privmsg = handle_privmsg;
 
 	// CREATE TWIRC INSTANCE
-	struct twirc_state *s = twirc_init(&e);
+	struct twirc_state *s = twirc_init(&cbs);
 	if (s == NULL)
 	{
 		fprintf(stderr, "Could not init twirc state\n");

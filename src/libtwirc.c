@@ -90,7 +90,10 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	buf[msg_len+1] = '\n';
 	buf[msg_len+2] = '\0';
 
-	fprintf(stderr, "< %s", buf);
+	if (strstr(buf, "PASS") == NULL)
+	{
+		fprintf(stderr, "< %s", buf);
+	}
 
 	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
 	free(buf);
@@ -218,6 +221,11 @@ int twirc_cmd_req_commands(struct twirc_state *state)
 	return twirc_send(state, "CAP REQ :twitch.tv/commands");
 }
 
+int twirc_cmd_req_chatrooms(struct twirc_state *state)
+{
+	return twirc_send(state, "CAP REQ :twitch.tv/tags twitch.tv/commands");
+}
+
 /*
  * Sends the PONG command to the IRC server.
  * Returns 0 on success, -1 otherwise.
@@ -235,6 +243,32 @@ int twirc_cmd_pong(struct twirc_state *state)
 int twirc_cmd_quit(struct twirc_state *state)
 {
 	return twirc_send(state, "QUIT");
+}
+
+int libtwirc_on_welcome(struct twirc_state *state, struct twirc_event *msg)
+{
+	state->status |= TWIRC_STATUS_AUTHENTICATED;
+	return 0;
+}
+
+int libtwirc_on_globaluserstate(struct twirc_state *state, struct twirc_event *msg)
+{
+	state->status |= TWIRC_STATUS_AUTHENTICATED;
+	return 0;
+}
+
+int libtwirc_on_capack(struct twirc_state *state, struct twirc_event *msg)
+{
+	// TODO
+	return 0;
+}
+
+int libtwirc_on_ping(struct twirc_state *state, struct twirc_event *msg)
+{
+	char pong[128];
+	pong[0] = '\0';
+	snprintf(pong, 128, "PONG %s", msg->params[0]);
+	return twirc_send(state, pong);
 }
 
 /*
@@ -275,15 +309,15 @@ int twirc_disconnect(struct twirc_state *state)
 /*
  * Set the state's events member to the given pointer.
  */
-void twirc_set_callbacks(struct twirc_state *state, struct twirc_events *events)
+void twirc_set_callbacks(struct twirc_state *s, struct twirc_callbacks *cbs)
 {
-	memcpy(&state->events, events, sizeof(struct twirc_events));
+	memcpy(&s->callbacks, cbs, sizeof(struct twirc_callbacks));
 }
 
 /*
  * TODO comment
  */
-struct twirc_state* twirc_init(struct twirc_events *events)
+struct twirc_state* twirc_init(struct twirc_callbacks *cbs)
 {
 	// TODO something in here leaks! I'm not sure what, the line numbers
 	// given by valgrind were comments, so it wasn't really accurate, but
@@ -305,10 +339,10 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 	
 	// Make sure the structs within state are zero-initialized
 	memset(&state->login, 0, sizeof(struct twirc_login));
-	memset(&state->events, 0, sizeof(struct twirc_events));
+	memset(&state->callbacks, 0, sizeof(struct twirc_callbacks));
 
 	// Copy the provided events 
-	twirc_set_callbacks(state, events);
+	twirc_set_callbacks(state, cbs);
 
 	// All done
 	return state;
@@ -317,8 +351,8 @@ struct twirc_state* twirc_init(struct twirc_events *events)
 int twirc_free_events(struct twirc_state *state)
 {
 	// TODO free all the members!
-	// free(state->events->...);
-	// state->events = NULL;
+	// free(callbacks->events->...);
+	// state->callbacks = NULL;
 	return 0;
 }
 
@@ -826,83 +860,80 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
 	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
-	struct twirc_message message = { 0 };
+	struct twirc_event evt = { 0 };
 
 	// Extract the tags, if any
-	msg = libtwirc_parse_tags(msg, &(message.tags), &(message.num_tags));
+	msg = libtwirc_parse_tags(msg, &(evt.tags), &(evt.num_tags));
 	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
 	// Extract the prefix, if any
-	msg = libtwirc_parse_prefix(msg, &(message.prefix));
+	msg = libtwirc_parse_prefix(msg, &(evt.prefix));
 	//fprintf(stderr, ">>> prefix: %s\n", prefix);
 
 	// Extract the command
-	msg = libtwirc_parse_command(msg, &(message.command));
+	msg = libtwirc_parse_command(msg, &(evt.command));
 	//fprintf(stderr, ">>> cmd: %s\n", cmd);
 
 	// Extract the parameters, if any
-	msg = libtwirc_parse_params(msg, &(message.params), &(message.num_params), &(message.trailing));
+	msg = libtwirc_parse_params(msg, &(evt.params), &(evt.num_params), &(evt.trailing));
 	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 
 	//fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
 
-	message.nick = message.prefix == NULL ? NULL : libtwirc_prefix_to_nick(message.prefix);
+	evt.nick = evt.prefix == NULL ? NULL : libtwirc_prefix_to_nick(evt.prefix);
 
 	// Some temporary test code (the first bit is important tho)
-	if (strcmp(message.command, "001") == 0)
+	if (strcmp(evt.command, "001") == 0)
 	{
-		state->status |= TWIRC_STATUS_AUTHENTICATED;
-		if (state->events.welcome != NULL)
+		//state->status |= TWIRC_STATUS_AUTHENTICATED;
+		libtwirc_on_welcome(state, &evt);
+		if (state->callbacks.welcome != NULL)
 		{
-			state->events.welcome(state, &message);
+			state->callbacks.welcome(state, &evt);
 		}
 
 	}
-	if (strcmp(message.command, "JOIN") == 0)
+	if (strcmp(evt.command, "JOIN") == 0)
 	{
-		if (state->events.join != NULL)
+		if (state->callbacks.join != NULL)
 		{
-			message.channel = message.params[0];
-			state->events.join(state, &message);
+			evt.channel = evt.params[0];
+			state->callbacks.join(state, &evt);
 		}
 
 	}
-	if (strcmp(message.command, "PING") == 0)
+	if (strcmp(evt.command, "PING") == 0)
 	{
-		char pong[128];
-		pong[0] = '\0';
-		snprintf(pong, 128, "PONG %s", message.params[0]);
-
-		twirc_send(state, pong);
-		if (state->events.ping != NULL)
+		libtwirc_on_ping(state, &evt);
+		if (state->callbacks.ping != NULL)
 		{
-			state->events.ping(state, &message);
+			state->callbacks.ping(state, &evt);
 		}
 	}
-	if (strcmp(message.command, "PRIVMSG") == 0 && message.num_params >= 2)
+	if (strcmp(evt.command, "PRIVMSG") == 0 && evt.num_params >= 2)
 	{
-		message.channel = message.params[0];
+		evt.channel = evt.params[0];
 
-		if (message.params[1][0] == 0x01 && message.params[1][strlen(message.params[1])-1] == 0x01)
+		if (evt.params[1][0] == 0x01 && evt.params[1][strlen(evt.params[1])-1] == 0x01)
 		{
 			// TODO deal with CTCP
 			//fprintf(stderr, "[!] CTCP detected\n");
 		}
 		else
 		{
-			if (state->events.privmsg != NULL)
+			if (state->callbacks.privmsg != NULL)
 			{
-				state->events.privmsg(state, &message);
+				state->callbacks.privmsg(state, &evt);
 			}
 		}
 	}
 
 	// Free resources from parsed message
-	libtwirc_free_tags(message.tags);
-	free(message.prefix);
-	free(message.nick);
-	free(message.command);
-	libtwirc_free_params(message.params);
+	libtwirc_free_tags(evt.tags);
+	free(evt.prefix);
+	free(evt.nick);
+	free(evt.command);
+	libtwirc_free_params(evt.params);
 
 	return 0; // TODO
 }
@@ -976,10 +1007,15 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 
 int twirc_capreq(struct twirc_state *s)
 {
-	return twirc_send(s, "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
+	//return twirc_send(s, "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
+	twirc_cmd_req_tags(s);
+	twirc_cmd_req_membership(s);
+	twirc_cmd_req_commands(s);
+	twirc_cmd_req_chatrooms(s);
+	return 0;
 }
 
-int libtwirc_evt_connect(struct twirc_state *s)
+int libtwirc_on_connect(struct twirc_state *s)
 {
 	// Start authentication process
 	if (s->status & TWIRC_STATUS_AUTHENTICATING)
@@ -993,7 +1029,7 @@ int libtwirc_evt_connect(struct twirc_state *s)
 		return -1;
 	}
 
-	// Request capabilities already, so that we'll received the
+	// Request capabilities already, so that we'll receive the
 	// GLOBALUSERSTATE command once we're logged in, which seems
 	// a cleaner way to check for login than to use the MOTD
 	fprintf(stderr, "Requesting capabilities...\n");
@@ -1040,15 +1076,15 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 			// Call Internal connect event handler
 			// It's supposed to request capabilities and 
 			// initiate the login (user authentication)
-			libtwirc_evt_connect(s);
+			libtwirc_on_connect(s);
 
 			// Call user's connect event handler
 			// Although I don't see what the user would want to do 
 			// on connect; the welcome event, which is dispatched 
 			// once authentication has happened, is way more useful
-			if (s->events.connect != NULL)
+			if (s->callbacks.connect != NULL)
 			{
-				s->events.connect(s, NULL);
+				s->callbacks.connect(s, NULL);
 			}
 		}
 	}

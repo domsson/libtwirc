@@ -90,7 +90,7 @@ struct twirc_tag
 	char *value;
 };
 
-struct twirc_message
+struct twirc_event
 {
 	char *prefix;
 	char *nick;
@@ -103,47 +103,51 @@ struct twirc_message
 	size_t num_tags;
 };
 
+struct twirc_caps
+{
+	int tags : 1;
+	int membership: 1;
+	int commands: 1;
+};
+
 // <message> ::= ['@' <tags> <SPACE>] [':' <prefix> <SPACE> ] <command> <params> <crlf>
 // Also, we might want to extract "nick" and "chan" from params, as these two will be in
 // there pretty often - and most likely relevant for the user.
 //
 // (struct twirc_state *s, const char *cmd, const struct twirc_tag **tags, const char *prefix, const char **params) 
-typedef void (*twirc_event)(struct twirc_state *s, const struct twirc_message *msg);
+typedef void (*twirc_callback)(struct twirc_state *s, const struct twirc_event *msg);
 
-struct twirc_events
+struct twirc_callbacks
 {
-	twirc_event connect;
-	twirc_event welcome;
-	twirc_event message;
-	twirc_event ping;
-	twirc_event join;
-	twirc_event part;
-	twirc_event quit;
-	twirc_event nick;
-	twirc_event mode;
-	twirc_event umode;
-	twirc_event topic;
-	twirc_event kick;
-	twirc_event channel;
-	twirc_event privmsg;
-	twirc_event notice;
-	twirc_event unknown;
+	twirc_callback connect;
+	twirc_callback welcome;
+	twirc_callback message;
+	twirc_callback ping;
+	twirc_callback join;
+	twirc_callback part;
+	twirc_callback quit;
+	twirc_callback nick;
+	twirc_callback kick;
+	twirc_callback channel;
+	twirc_callback privmsg;
+	twirc_callback notice;
+	twirc_callback unknown;
 };
 
 struct twirc_state
 {
-	int status : 8;                 // connection status
-	int running;                    // are we running in a loop?
-	int ip_type;                    // ip type, ipv4 or ipv6
-	int socket_fd;                  // tcp socket file descriptor
-	char *buffer;                   // irc message buffer
-	struct twirc_login login;       // irc login data 
-	struct twirc_events events;     // event callbacks
-	int epfd;                       // epoll file descriptor
+	int status : 8;                    // connection status
+	int running;                       // are we running in a loop?
+	int ip_type;                       // ip type, ipv4 or ipv6
+	int socket_fd;                     // tcp socket file descriptor
+	char *buffer;                      // irc message buffer
+	struct twirc_login login;          // irc login data 
+	struct twirc_callbacks callbacks;  // event callbacks
+	int epfd;                          // epoll file descriptor
 };
 
-struct twirc_state* twirc_init(struct twirc_events *e);
-void twirc_set_callbacks(struct twirc_state *s, struct twirc_events *e);
+struct twirc_state* twirc_init(struct twirc_callbacks *c);
+void twirc_set_callbacks(struct twirc_state *s, struct twirc_callbacks *c);
 
 int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *pass, const char *nick);
 int twirc_disconnect(struct twirc_state *s);
