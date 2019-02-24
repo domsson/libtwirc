@@ -95,6 +95,13 @@ struct twirc_login
 	char *pass;
 };
 
+struct twirc_user
+{
+	char *name;     // display-name
+	char *id;       // user-id
+	char color[8];  // color in chat
+};
+
 struct twirc_tag
 {
 	char *key;
@@ -102,22 +109,29 @@ struct twirc_tag
 };
 
 // https://pastebin.com/qzzvpuB6
+/*
 struct twirc_tags
 {
 
 };
+*/
 
 struct twirc_event
 {
+	// 'Raw' data
 	char *prefix;
-	char *nick;
-	char *channel;
 	char *command;
 	char **params;
 	size_t num_params;
 	int trailing;
 	struct twirc_tag **tags;
 	size_t num_tags;
+	
+	// For convenience
+	char *nick;
+	char *channel;
+	char *message;  // Actual text/chat message
+	char *ctcp;	// CTCP commmand, if any
 };
 
 struct twirc_caps
@@ -138,7 +152,8 @@ struct twirc_callbacks
 {
 	twirc_callback connect;         // connection established
 	twirc_callback welcome;         // 001 received (logged in)
-	twirc_callback ping;
+	twirc_callback globaluserstate; // logged in (+ user info)
+	twirc_callback ping;            // PING received
 	twirc_callback join;
 	twirc_callback part;
 	twirc_callback channel;
@@ -146,6 +161,8 @@ struct twirc_callbacks
 	twirc_callback whisper;
 	twirc_callback notice;
 	twirc_callback clearchat;	// temp/perm ban
+	twirc_callback action;          // CTCP ACTION received
+	twirc_callback disconnect;	// connection interrupted
 	twirc_callback unknown;
 };
 
@@ -157,7 +174,8 @@ struct twirc_state
 	int socket_fd;                     // tcp socket file descriptor
 	char *buffer;                      // irc message buffer
 	struct twirc_login login;          // irc login data 
-	struct twirc_callbacks callbacks;  // event callbacks
+	struct twirc_user user;            // twitch user details
+	struct twirc_callbacks cbs;        // event callbacks
 	int epfd;                          // epoll file descriptor
 };
 

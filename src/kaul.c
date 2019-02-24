@@ -52,7 +52,7 @@ void handle_welcome(struct twirc_state *s, const struct twirc_event *evt)
 {
 	// Let's join a lot of channels to test this bad boy!
 	twirc_cmd_join(s, "#domsson");
-/*
+
 	twirc_cmd_join(s, "#hanryang1125");
 	twirc_cmd_join(s, "#toborprime");
 	twirc_cmd_join(s, "#honestdangames");
@@ -64,7 +64,6 @@ void handle_welcome(struct twirc_state *s, const struct twirc_event *evt)
 	twirc_cmd_join(s, "#retrogaijin");
 	twirc_cmd_join(s, "#yumyumyu77");
 	twirc_cmd_join(s, "#esl_csgo");
-*/
 }
 
 /*
@@ -88,7 +87,32 @@ void handle_privmsg(struct twirc_state *s, const struct twirc_event *evt)
 	
 	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", 
 			tm.tm_hour, tm.tm_min, tm.tm_sec, 
-			evt->channel, evt->nick, evt->params[1]);
+			evt->channel, evt->nick, evt->message);
+}
+
+void handle_action(struct twirc_state *s, const struct twirc_event *evt)
+{
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+
+	fprintf(stdout, "[%02d:%02d:%02d] (%s) * %s %s\n",
+			tm.tm_hour, tm.tm_min, tm.tm_sec,
+			evt->channel, evt->nick, evt->message);
+}
+
+void handle_whisper(struct twirc_state *s, const struct twirc_event *evt)
+{
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+
+	fprintf(stdout, "[%02d:%02d:%02d] (whisper) %s: %s\n",
+			tm.tm_hour, tm.tm_min, tm.tm_sec,
+			evt->nick, evt->message);
+}
+
+void handle_disconnect(struct twirc_state *s, const struct twirc_event *evt)
+{
+	fprintf(stdout, "*** connection lost\n");
 }
 
 /*
@@ -105,10 +129,13 @@ int main(void)
 	
 	// SET UP CALLBACKS
 	struct twirc_callbacks *cbs = twirc_get_callbacks(s);
-	cbs->connect = handle_connect;
-	cbs->welcome = handle_welcome;
-	cbs->join    = handle_join;
-	cbs->privmsg = handle_privmsg;
+	cbs->connect    = handle_connect;
+	cbs->welcome    = handle_welcome;
+	cbs->join       = handle_join;
+	cbs->action     = handle_action;
+	cbs->privmsg    = handle_privmsg;
+	cbs->whisper    = handle_whisper;
+	cbs->disconnect = handle_disconnect;
 
 	if (s == NULL)
 	{
