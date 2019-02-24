@@ -225,11 +225,30 @@ int twirc_cmd_part(struct twirc_state *state, const char *chan)
  * TODO: Check if chan begins with "#" and prefix it otherwise?
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *message)
+int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *msg)
 {
-	char msg[TWIRC_BUFFER_SIZE];
-	snprintf(msg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :%s", chan, message);
-	return twirc_send(state, msg);
+	char privmsg[TWIRC_BUFFER_SIZE];
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :%s", chan, msg);
+	return twirc_send(state, privmsg);
+}
+
+int twirc_cmd_action(struct twirc_state *state, const char *chan, const char *msg)
+{
+	// "PRIVMSG #<chan> :\x01ACTION <msg>\x01"
+	char action[TWIRC_MESSAGE_SIZE];
+	action[0] = '\0';
+	snprintf(action, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :%cACTION %s%c",
+			chan, '\x01', msg, '\x01');
+	return twirc_send(state, action);
+}
+
+int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *msg)
+{
+	// "PRIVMSG #jtv :/w <user> <msg>"
+	char whisper[TWIRC_MESSAGE_SIZE];
+	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :/w %s %s", 
+			TWIRC_WHISPER_CHANNEL, nick, msg);
+	return twirc_send(state, whisper);
 }
 
 /*
@@ -303,15 +322,6 @@ int twirc_cmd_pong(struct twirc_state *state, const char *param)
 int twirc_cmd_quit(struct twirc_state *state)
 {
 	return twirc_send(state, "QUIT");
-}
-
-int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *msg)
-{
-	// "PRIVMSG #jtv :/w <user> <msg>"
-	char whisper[TWIRC_MESSAGE_SIZE];
-	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :/w %s %s", 
-			TWIRC_WHISPER_CHANNEL, nick, msg);
-	return twirc_send(state, whisper);
 }
 
 /*

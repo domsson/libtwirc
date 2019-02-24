@@ -199,6 +199,7 @@ int twirc_cmd_nick(struct twirc_state *s, const char *nick);
 int twirc_cmd_join(struct twirc_state *s, const char *chan);
 int twirc_cmd_part(struct twirc_state *s, const char *chan);
 int twirc_cmd_privmsg(struct twirc_state *s, const char *chan, const char *msg);
+int twirc_cmd_action(struct twirc_state *s, const char *chan, const char *msg);
 int twirc_cmd_whisper(struct twirc_state *s, const char *nick, const char *msg);
 int twirc_cmd_req_tags(struct twirc_state *s);
 int twirc_cmd_req_membership(struct twirc_state *s);

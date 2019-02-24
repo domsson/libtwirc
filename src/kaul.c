@@ -77,6 +77,7 @@ void handle_join(struct twirc_state *s, const struct twirc_event *evt)
 	    && strcmp(evt->params[0], "#domsson") == 0)
 	{
 			twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
+			twirc_cmd_action(s, "#domsson", "is the coolest bot of all times");
 	}
 }
 
