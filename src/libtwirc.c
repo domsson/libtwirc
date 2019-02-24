@@ -178,7 +178,7 @@ int twirc_is_logged_in(const struct twirc_state *state)
 
 /*
  * Sends the PASS command to the server, with the pass appended as parameter.
- * TODO: Check if pass begins with "oauth:" and prefix it otherwise?
+ * This is the first part of the authentication process (next part is NICK).
  * Returns 0 if the command was sent successfully, -1 on error.
  */
 int twirc_cmd_pass(struct twirc_state *state, const char *pass)
@@ -190,6 +190,7 @@ int twirc_cmd_pass(struct twirc_state *state, const char *pass)
 
 /*
  * Sends the NICK command to the server, with the nick appended as parameter.
+ * This is the second part of the authentication process (first is PASS).
  * Returns 0 if the command was sent successfully, -1 on error.
  */
 int twirc_cmd_nick(struct twirc_state *state, const char *nick)
@@ -200,7 +201,7 @@ int twirc_cmd_nick(struct twirc_state *state, const char *nick)
 }
 
 /*
- * TODO: Check if chan begins with "#" and prefix it otherwise.
+ * Request to join the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
 int twirc_cmd_join(struct twirc_state *state, const char *chan)
@@ -211,7 +212,7 @@ int twirc_cmd_join(struct twirc_state *state, const char *chan)
 }
 
 /*
- * TODO: Check if chan begins with "#" and prefix it otherwise?
+ * Leave (part) the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
 int twirc_cmd_part(struct twirc_state *state, const char *chan)
@@ -222,7 +223,7 @@ int twirc_cmd_part(struct twirc_state *state, const char *chan)
 }
 
 /*
- * TODO: Check if chan begins with "#" and prefix it otherwise?
+ * Send a message (privmsg) to the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
 int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *msg)
@@ -232,6 +233,10 @@ int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *m
 	return twirc_send(state, privmsg);
 }
 
+/*
+ * Send a CTCP ACTION message (aka "/me") to the specified channel.
+ * Returns 0 if the command was sent successfully, -1 on error.
+ */
 int twirc_cmd_action(struct twirc_state *state, const char *chan, const char *msg)
 {
 	// "PRIVMSG #<chan> :\x01ACTION <msg>\x01"
@@ -242,6 +247,10 @@ int twirc_cmd_action(struct twirc_state *state, const char *chan, const char *ms
 	return twirc_send(state, action);
 }
 
+/*
+ * Send a whisper message to the specified user.
+ * Returns 0 if the command was sent successfully, -1 on error.
+ */
 int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *msg)
 {
 	// "PRIVMSG #jtv :/w <user> <msg>"
