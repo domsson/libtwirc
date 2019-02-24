@@ -52,6 +52,13 @@
 // RELOADMODULE, both have a length of 12. Hence, a size of 16 seems enough.
 #define TWIRC_COMMAND_SIZE 16
 
+// Total size for the PONG command, including its optional parameter.
+// Currently, the command is always "PONG :tmi.twitch.tv", but it might change
+// slightly in the future if Twitch is ever changing that URI. Currently, with
+// the command taking up 20 bytes, 32 is more than enough of a buffer, but we
+// might just go with twice that to be on the safe side.
+#define TWIRC_PONG_SIZE 64
+
 // The length of Twitch user names is limited to 25. Hence, 32 will do us fine.
 // https://www.reddit.com/r/Twitch/comments/32w5b2/username_requirements/
 #define TWIRC_NICK_SIZE 32
@@ -74,6 +81,10 @@
 // http://www.networksorcery.com/enp/protocol/irc.htm
 #define TWIRC_NUM_PARAMS 4
 
+// For some reason, when sending whispers, we apparently have to use a channel
+// called #jtv - I don't get it, but it seems to work...
+#define TWIRC_WHISPER_CHANNEL "#jtv"
+
 struct twirc_state;
 
 struct twirc_login
@@ -88,6 +99,12 @@ struct twirc_tag
 {
 	char *key;
 	char *value;
+};
+
+// https://pastebin.com/qzzvpuB6
+struct twirc_tags
+{
+
 };
 
 struct twirc_event
@@ -119,18 +136,16 @@ typedef void (*twirc_callback)(struct twirc_state *s, const struct twirc_event *
 
 struct twirc_callbacks
 {
-	twirc_callback connect;
-	twirc_callback welcome;
-	twirc_callback message;
+	twirc_callback connect;         // connection established
+	twirc_callback welcome;         // 001 received (logged in)
 	twirc_callback ping;
 	twirc_callback join;
 	twirc_callback part;
-	twirc_callback quit;
-	twirc_callback nick;
-	twirc_callback kick;
 	twirc_callback channel;
 	twirc_callback privmsg;
+	twirc_callback whisper;
 	twirc_callback notice;
+	twirc_callback clearchat;	// temp/perm ban
 	twirc_callback unknown;
 };
 
@@ -146,7 +161,9 @@ struct twirc_state
 	int epfd;                          // epoll file descriptor
 };
 
-struct twirc_state* twirc_init(struct twirc_callbacks *c);
+//struct twirc_state* twirc_init(struct twirc_callbacks *c);
+struct twirc_state *twirc_init();
+struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s);
 void twirc_set_callbacks(struct twirc_state *s, struct twirc_callbacks *c);
 
 int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *pass, const char *nick);
@@ -164,11 +181,13 @@ int twirc_cmd_nick(struct twirc_state *s, const char *nick);
 int twirc_cmd_join(struct twirc_state *s, const char *chan);
 int twirc_cmd_part(struct twirc_state *s, const char *chan);
 int twirc_cmd_privmsg(struct twirc_state *s, const char *chan, const char *msg);
+int twirc_cmd_whisper(struct twirc_state *s, const char *nick, const char *msg);
 int twirc_cmd_req_tags(struct twirc_state *s);
 int twirc_cmd_req_membership(struct twirc_state *s);
 int twirc_cmd_req_commands(struct twirc_state *s);
-int twirc_cmd_pong(struct twirc_state *s);
+int twirc_cmd_pong(struct twirc_state *s, const char *param);
 int twirc_cmd_quit(struct twirc_state *s);
 
-
+int twirc_is_connected(const struct twirc_state *s);
+int twirc_is_logged_in(const struct twirc_state *s);
 #endif

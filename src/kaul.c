@@ -72,11 +72,12 @@ void handle_welcome(struct twirc_state *s, const struct twirc_event *evt)
  */
 void handle_join(struct twirc_state *s, const struct twirc_event *evt)
 {
-	fprintf(stdout, "*** joined %s\n", evt->params[0]);
-	if (strcmp(evt->prefix, "kaulmate!kaulmate@kaulmate.tmi.twitch.tv") == 0
-		&& strcmp(evt->params[0], "#domsson") == 0)
+	fprintf(stdout, "*** %s joined %s\n", evt->nick, evt->params[0]);
+
+	if (evt->nick && strcmp(evt->nick, "kaulmate") == 0
+	    && strcmp(evt->params[0], "#domsson") == 0)
 	{
-		twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
+			twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
 	}
 }
 
@@ -99,15 +100,16 @@ int main(void)
 	fprintf(stderr, "Starting up %s version %o.%o build %f\n",
 		TWIRC_NAME, TWIRC_VER_MAJOR, TWIRC_VER_MINOR, TWIRC_VER_BUILD);
 
-	// SET UP CALLBACKS
-	struct twirc_callbacks cbs = { 0 };
-	cbs.connect = handle_connect;
-	cbs.welcome = handle_welcome;
-	cbs.join    = handle_join;
-	cbs.privmsg = handle_privmsg;
-
 	// CREATE TWIRC INSTANCE
-	struct twirc_state *s = twirc_init(&cbs);
+	struct twirc_state *s = twirc_init();
+	
+	// SET UP CALLBACKS
+	struct twirc_callbacks *cbs = twirc_get_callbacks(s);
+	cbs->connect = handle_connect;
+	cbs->welcome = handle_welcome;
+	cbs->join    = handle_join;
+	cbs->privmsg = handle_privmsg;
+
 	if (s == NULL)
 	{
 		fprintf(stderr, "Could not init twirc state\n");

@@ -160,6 +160,23 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 }
 
 /*
+ * Returns 1 if state is connected to Twitch IRC, otherwise 0.
+ */
+int twirc_is_connected(const struct twirc_state *state)
+{
+	return state->status & TWIRC_STATUS_CONNECTED ? 1 : 0;
+}
+
+/*
+ * Returns 1 if state is authenticated (logged in), otherwise 0.
+ */
+int twirc_is_logged_in(const struct twirc_state *state)
+{
+	return state->status & TWIRC_STATUS_AUTHENTICATED ? 1 : 0;
+}
+
+
+/*
  * TODO: Check if pass begins with "oauth:" and prefix it otherwise.
  */
 int twirc_cmd_pass(struct twirc_state *state, const char *pass)
@@ -228,12 +245,20 @@ int twirc_cmd_req_chatrooms(struct twirc_state *state)
 
 /*
  * Sends the PONG command to the IRC server.
+ * If param is given, it will be appended. To make Twitch happy (this is not 
+ * part of the IRC specification, the param will be prefixed with a colon (":")
+ * unless it is prefixed with one already.
  * Returns 0 on success, -1 otherwise.
- * TODO: do we need to append " :tmi.twitch.tv"?
  */
-int twirc_cmd_pong(struct twirc_state *state)
+int twirc_cmd_pong(struct twirc_state *state, const char *param)
 {
-	return twirc_send(state, "PONG");
+	// "PONG :tmi.twitch.tv"
+	char pong[TWIRC_PONG_SIZE];
+	pong[0] = '\0';
+	snprintf(pong, TWIRC_PONG_SIZE, "PONG %s%s", 
+			param && param[0] == ':' ? "" : ":",
+			param ? param : "");
+	return twirc_send(state, pong);
 }
 
 /*
@@ -245,30 +270,429 @@ int twirc_cmd_quit(struct twirc_state *state)
 	return twirc_send(state, "QUIT");
 }
 
-int libtwirc_on_welcome(struct twirc_state *state, struct twirc_event *msg)
+int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *msg)
+{
+	// "PRIVMSG #jtv :/w <user> <msg>"
+	char whisper[TWIRC_MESSAGE_SIZE];
+	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :/w %s %s", 
+			TWIRC_WHISPER_CHANNEL, nick, msg);
+	return twirc_send(state, whisper);
+}
+
+/*
+ * This dummy callback function does absolutely nothing.
+ * However, it allows us to make sure that all callbacks are non-NULL,
+ * removing the need to check for NULL everytime before we call them.
+ */
+void libtwirc_callback_null(struct twirc_state *s, const struct twirc_event *evt)
+{
+	// fprintf(stderr, "[ dummy callback ]\n");	
+	// Nothing to do here. That's on purpose.
+}
+
+int libtwirc_on_welcome(struct twirc_state *state, struct twirc_event *evt)
 {
 	state->status |= TWIRC_STATUS_AUTHENTICATED;
 	return 0;
 }
 
-int libtwirc_on_globaluserstate(struct twirc_state *state, struct twirc_event *msg)
-{
-	state->status |= TWIRC_STATUS_AUTHENTICATED;
-	return 0;
-}
-
-int libtwirc_on_capack(struct twirc_state *state, struct twirc_event *msg)
+int libtwirc_on_capack(struct twirc_state *state, struct twirc_event *evt)
 {
 	// TODO
+	return -1;
+}
+
+int libtwirc_on_ping(struct twirc_state *state, struct twirc_event *evt)
+{
+	return twirc_cmd_pong(state, evt->params[0]);
+}
+
+/*
+ * Join a channel.
+ * 
+ * > :<user>!<user>@<user>.tmi.twitch.tv JOIN #<channel>
+ */
+int libtwirc_on_join(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * Gain/lose moderator (operator) status in a channel.
+ *
+ * > :jtv MODE #<channel> +o <user>
+ * > :jtv MODE #<channel> -o <user>
+ */
+int libtwirc_on_mode(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * List current chatters in a channel. 
+ * If there are more than 1000 chatters in a room, NAMES return only the list 
+ * of operator privileges currently in the room.
+ *
+ * > :<user>.tmi.twitch.tv 353 <user> = #<channel> :<user> <user2> <user3>
+ * > :<user>.tmi.twitch.tv 353 <user> = #<channel> :<user4> <user5> ... <userN>
+ * > :<user>.tmi.twitch.tv 366 <user> #<channel> :End of /NAMES list
+ */
+int libtwirc_on_names(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * Depart from a channel.
+ *
+ * > :<user>!<user>@<user>.tmi.twitch.tv PART #<channel>
+ */
+int libtwirc_on_part(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * On successful login.
+ * > @badges=<badges>;color=<color>;display-name=<display-name>;
+ *   emote-sets=<emote-sets>;turbo=<turbo>;user-id=<user-id>;user-type=<user-type>
+ *    :tmi.twitch.tv GLOBALUSERSTATE
+ *
+ * badges:       Comma-separated list of chat badges and the version of each badge 
+ *               (each in the format <badge>/<version>, such as admin/1). Valid 
+ *               badge values: admin, bits, broadcaster, global_mod, moderator, 
+ *               subscriber, staff, turbo.
+ * color:        Hexadecimal RGB color code. This is empty if it is never set.
+ * display-name: The user’s display name, escaped as described in the IRCv3 spec.
+ *               This is empty if it is never set.
+ * emote-sets:   A comma-separated list of emotes, belonging to one or more emote
+ *               sets. This always contains at least 0. Get Chat Emoticons by Set
+ *               gets a subset of emoticons.
+ * turbo:        (Deprecated, use badges instead) 1 if the user has a Turbo badge;
+ *               otherwise, 0.
+ * user-id:      The user’s ID.
+ * user-type:    (Deprecated, use badges instead) The user’s type. Valid values:
+ *               empty, mod, global_mod, admin, staff. The broadcaster can have 
+ *               any of these. 
+ */
+int libtwirc_on_globaluserstate(struct twirc_state *state, struct twirc_event *evt)
+{
+	state->status |= TWIRC_STATUS_AUTHENTICATED;
 	return 0;
 }
 
-int libtwirc_on_ping(struct twirc_state *state, struct twirc_event *msg)
+/*
+ * Temporary or permanent ban on a channel. 
+ * > @ban-duration=<ban-duration> :tmi.twitch.tv CLEARCHAT #<channel> :<user>
+ *
+ * ban-duration: (Optional) Duration of the timeout, in seconds.
+ *               If omitted, the ban is permanent.
+ */
+int libtwirc_on_clearchat(struct twirc_state *state, struct twirc_event *evt)
 {
-	char pong[128];
-	pong[0] = '\0';
-	snprintf(pong, 128, "PONG %s", msg->params[0]);
-	return twirc_send(state, pong);
+	// TODO
+	return -1;
+}
+
+/*
+ * Single message removal on a channel. This is triggered via 
+ * /delete <target-msg-id> on IRC.
+ *
+ * > @login=<login>;target-msg-id=<target-msg-id> 
+ *    :tmi.twitch.tv CLEARMSG #<channel> :<message>
+ * 
+ * login:         Name of the user who sent the message.
+ * message:       The message.
+ * target-msg-id: UUID of the message.
+ */
+int libtwirc_on_clearmsg(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * Channel starts or stops host mode.
+ *
+ * Start:
+ * > :tmi.twitch.tv HOSTTARGET #hosting_channel <channel> [<number-of-viewers>]
+ *
+ * Stop:
+ * > :tmi.twitch.tv HOSTTARGET #hosting_channel :- [<number-of-viewers>]
+ *
+ * number-of-viewers: (Optional) Number of viewers watching the host.
+ *
+ * Example:
+ * > :tmi.twitch.tv HOSTTARGET #domsson :fujioka_twitch -
+ */
+int libtwirc_on_hosttarget(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * General notices from the server.
+ *
+ * > @msg-id=<msg id>:tmi.twitch.tv NOTICE #<channel> :<message>
+ *
+ * message: The message.
+ * msg id:  A message ID string. Can be used for i18ln. Valid values: 
+ *          see Twitch IRC: msg-id Tags.
+ *          https://dev.twitch.tv/docs/irc/msg-id/
+ *
+ * Example:
+ * > @msg-id=host_target_went_offline 
+ *    :tmi.twitch.tv NOTICE #domsson 
+ *    :joshachu has gone offline. Exiting host mode.
+ */
+int libtwirc_on_notice(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+int libtwirc_on_ctcp(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * Rejoin channels after a restart.
+ * 
+ * Twitch IRC processes occasionally need to be restarted. When this happens,
+ * clients that have requested the IRC v3 twitch.tv/commands capability are 
+ * issued a RECONNECT. After a short time, the connection is closed. In this 
+ * case, reconnect and rejoin channels that were on the connection, as you 
+ * would normally.
+ */
+ int libtwirc_on_reconnect(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * Send a message to a channel.
+ * > @badges=<badges>;color=<color>;display-name=<display-name>;emotes=<emotes>;
+ *   id=<id-of-msg>;mod=<mod>;room-id=<room-id>;subscriber=<subscriber>;
+ *   tmi-sent-ts=<timestamp>;turbo=<turbo>;user-id=<user-id>;user-type=<user-type>
+ *    :<user>!<user>@<user>.tmi.twitch.tv PRIVMSG #<channel> :<message>
+ *
+ * badges:       Comma-separated list of chat badges and the version of each 
+ *               badge (each in the format <badge>/<version>, such as admin/1).
+ *               Valid badge values: admin, bits, broadcaster, global_mod, 
+ *               moderator, subscriber, staff, turbo.
+ * bits:         (Sent only for Bits messages) The amount of cheer/Bits employed
+ *               by the user. All instances of these regular expressions:
+ *               /(^\|\s)<emote-name>\d+(\s\|$)/
+ *               (where <emote-name> is an emote name returned by the 
+ *               Get Cheermotes endpoint), should be replaced with the 
+ *               appropriate emote:
+ *               static-cdn.jtvnw.net/bits/<theme>/<type>/<color>/<size>
+ *               - theme: light or dark
+ *               - type:  animated or static
+ *               - color: red for 10000+ Bits, blue for 5000-9999, green for 
+ *                 1000-4999, purple for 100-999, gray for 1-99
+ *               - size:  A digit between 1 and 4
+ * color:        Hexadecimal RGB color code. This is empty if it is never set.
+ * display-name: The user’s display name, escaped as described in the IRCv3 spec.
+ *               This is empty if it is never set.
+ * emotes:       Information to replace text in the message with emote images.
+ *               This can be empty. Syntax:
+ *               <eid>:<f>-<l>,<f>-<l>/<eid>:<f>-<l>...
+ *               - eid: The number to use in this URL:
+ *                 http://static-cdn.jtvnw.net/emoticons/v1/:<eid>/:<size>
+ *                 (size is 1.0, 2.0 or 3.0.)
+ *               - f/l: Character indexes. \001ACTION does not count.
+ *                 Indexing starts from the first character that is part of the
+ *                 user’s actual message.
+ * id:           A unique ID for the message.
+ * message:      The message.
+ * mod:          1 if the user has a moderator badge; otherwise, 0.
+ * room-id:      The channel ID.
+ * subscriber:   (Deprecated, use badges instead) 1 if the user has a
+ *               subscriber badge; otherwise, 0.
+ * tmi-sent-ts:  Timestamp when the server received the message.
+ * turbo:        (Deprecated, use badges instead) 1 if the user has a Turbo 
+ *               badge; otherwise, 0.
+ * user-id:      The user’s ID.
+ * user-type:    (Deprecated, use badges instead) The user’s type. Valid values: 
+ *               mod, global_mod, admin, staff. If the broadcaster is not any of
+ *               these user types, this field is left empty.
+ */
+int libtwirc_on_privmsg(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * When a user joins a channel or a room setting is changed.
+ * For a join, the message contains all chat-room settings. For changes, only the relevant tag is sent.
+ *
+ * > @broadcaster-lang=<broadcaster-lang>;emote-only=<emote-only>;
+ *   followers-only=<followers-only>;r9k=<r9k>;slow=<slow>;subs-only=<subs-only>
+ *    :tmi.twitch.tv ROOMSTATE #<channel>
+ *
+ * broadcaster-lang: The chat language when broadcaster language mode is
+ *                   enabled; otherwise, empty. Examples: en (English), 
+ *                   fi (Finnish), es-MX (Mexican variant of Spanish).
+ * emote-only:       Emote-only mode. If enabled, only emotes are allowed in
+ *                   chat. Valid values: 0 (disabled) or 1 (enabled).
+ * followers-only:   Followers-only mode. If enabled, controls which followers 
+ *                   can chat. Valid values: -1 (disabled), 0 (all followers 
+ *                   can chat), or a non-negative integer (only users following
+ *                   for at least the specified number of minutes can chat).
+ * r9k:              R9K mode. If enabled, messages with more than 9 characters
+ *                   must be unique. Valid values: 0 (disabled) or 1 (enabled).
+ * slow:             The number of seconds chatters without moderator 
+ *                   privileges must wait between sending messages.
+ * subs-only:        Subscribers-only mode. If enabled, only subscribers and 
+ *                   moderators can chat. Valid values: 0 (disabled) or 1 
+ *                   (enabled).
+ */
+int libtwirc_on_roomstate(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * On any of the following events:
+ * - Subscription, resubscription, or gift subscription to a channel.
+ * - Incoming raid to a channel.
+ * - Channel ritual. Many channels have special rituals to celebrate viewer 
+ *   milestones when they are shared. The rituals notice extends the sharing of
+ *   these messages to other viewer milestones (initially, a new viewer chatting
+ *   for the first time).
+ *
+ * These fields are sent for all USERNOTICEs:
+ * 
+ * > @badges=<badges>;color=<color>;display-name=<display-name>;emotes=<emotes>;
+ * id=<id-of-msg>;login=<user>;mod=<mod>;msg-id=<msg-id>;room-id=<room-id>;
+ * subscriber=<subscriber>;system-msg=<system-msg>;tmi-sent-ts=<timestamp>;
+ * turbo=<turbo>;user-id=<user-id>;user-type=<user-type> 
+ *  :tmi.twitch.tv USERNOTICE #<channel> :<message>   
+ *
+ * Several other, msg-param fields are sent only for sub/resub, subgift, 
+ * anonsubgift, raid, or ritual notices. See the table below for details. 
+ *
+ * badges:                           Comma-separated list of chat badges and the
+ *                                   version of each badge (each in the format 
+ *                                   <badge>/<version>, such as admin/1). Valid 
+ *                                   badge values: admin, bits, broadcaster, 
+ *                                   global_mod, moderator, subscriber, staff,
+ *                                   turbo.
+ * color:                            Hexadecimal RGB color code. This is empty if
+ *                                   it is never set.
+ * display-name:                     The user’s display name, escaped as described
+ *                                   in the IRCv3 spec. This is empty if it is 
+ *                                   never set.
+ * emotes                            (see PRIVMSG)
+ * id                                A unique ID for the message.
+ * login                             The name of the user who sent the notice.
+ * message                           The message. This is omitted if the user did
+ *                                   not enter a message.
+ * mod                               1 if the user has a moderator badge; 
+ *                                   otherwise, 0.
+ * msg-id                            The type of notice (not the ID). Valid values:
+ *                                   sub, resub, subgift, anonsubgift, raid, ritual.
+ * msg-param-cumulative-months:      (Sent only on sub, resub) The total number of
+ *                                   months the user has subscribed. This is the 
+ *                                   same as msg-param-months but sent for different
+ *                                   types of user notices.
+ * msg-param-displayName:            (Sent only on raid) The display name of the 
+ *                                   source user raiding this channel.
+ * msg-param-login:                  (Sent on only raid) The name of the source 
+ *                                   user raiding this channel.
+ * msg-param-months:                 (Sent only on subgift, anonsubgift) The total
+ *                                   number of months the user has subscribed. This
+ *                                   is the same as msg-param-cumulative-months but
+ *                                   sent for different types of user notices.
+ * msg-param-recipient-display-name: (Sent only on subgift, anonsubgift) The display
+ *                                   name of the subscription gift recipient.
+ * msg-param-recipient-id:           (Sent only on subgift, anonsubgift) The user ID
+ *                                   of the subscription gift recipient.
+ * msg-param-recipient-user-name:    (Sent only on subgift, anonsubgift) The user 
+ *                                   name of the subscription gift recipient.
+ * msg-param-should-share-streak:    (Sent only on sub, resub) Boolean indicating
+ *                                   whether users want their streaks to be shared.
+ * msg-param-streak-months:          (Sent only on sub, resub) The number of 
+ *                                   consecutive months the user has subscribed. 
+ *                                   This is 0 if msg-param-should-share-streak is 0.
+ * msg-param-sub-plan:               (Sent only on sub, resub, subgift, anonsubgift)
+ *                                   The type of subscription plan being used. 
+ *                                   Valid values: Prime, 1000, 2000, 3000. 1000, 
+ *                                   2000, and 3000 refer to the first, second, and 
+ *                                   third levels of paid subscriptions, respectively
+ *                                   (currently $4.99, $9.99, and $24.99).
+ * msg-param-sub-plan-name           (Sent only on sub, resub, subgift, anonsubgift)
+ *                                   The display name of the subscription plan. This 
+ *                                   may be a default name or one created by the 
+*                                    channel owner.
+ * msg-param-viewerCount:            (Sent only on raid) The number of viewers 
+ *                                   watching the source channel raiding this channel.
+ * msg-param-ritual-name:            (Sent only on ritual) The name of the ritual 
+ *                                   this notice is for. Valid value: new_chatter.
+ * room-id:                          The channel ID.
+ * system-msg:                       The message printed in chat along with this notice.
+ * tmi-sent-ts:                      Timestamp when the server received the message.
+ * user-id:                          The user’s ID.
+ */
+int libtwirc_on_usernotice(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * When a user joins a channel or sends a PRIVMSG to a channel.
+ *
+ * > @badges=<badges>;color=<color>;display-name=<display-name>;
+ *   emote-sets=<emotes>;mod=<mod>;subscriber=<subscriber>;turbo=<turbo>;
+ *   user-type=<user-type> 
+ *    :tmi.twitch.tv USERSTATE #<channel>
+ *
+ * badges:       Comma-separated list of chat badges and the version of each badge
+ *               (each in the format <badge>/<version>, such as admin/1). 
+ *               Valid badge values: admin, bits, broadcaster, global_mod, 
+ *               moderator, subscriber, staff, turbo, vip.
+ * color:        Hexadecimal RGB color code. This is empty if it is never set.
+ * display-name: The user’s display name, escaped as described in the IRCv3 spec.
+ *               This is empty if it is never set.
+ * emotes:       Your emote set, a comma-separated list of emotes. This always 
+ *               contains at least 0. Get Chat Emoticons by Set gets a subset of
+ *               emoticon images.
+ * mod:          1 if the user has a moderator badge; otherwise, 0.
+ */
+int libtwirc_on_userstate(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
+}
+
+/*
+ * This doesn't seem to be documented. Also, I've read in several places that
+ * Twitch plans to move away from IRC for whispers (and whispers only). But for
+ * now, sending a whisper to the bot does arrive as a regular IRC message, more
+ * precisely as a WHISPER message. Example:
+ *
+ * https://discuss.dev.twitch.tv/t/what-are-specifics-of-irc-chat-and-whispering-noob-solved-i-think/6175/8
+ *
+ * @badges=;color=#DAA520;display-name=domsson;emotes=;message-id=7;
+ *  thread-id=65269353_274538602;turbo=0;user-id=65269353;user-type= 
+ *   :domsson!domsson@domsson.tmi.twitch.tv WHISPER kaulmate :hey kaul!
+ */
+int libtwirc_on_whisper(struct twirc_state *state, struct twirc_event *evt)
+{
+	// TODO
+	return -1;
 }
 
 /*
@@ -307,22 +731,50 @@ int twirc_disconnect(struct twirc_state *state)
 }
 
 /*
+ * Sets all callback members to the dummy callback
+ */
+void twirc_init_callbacks(struct twirc_callbacks *cbs)
+{
+	// TODO figure out if there is a more elegant and dynamic way...
+	cbs->connect   = libtwirc_callback_null;
+	cbs->welcome   = libtwirc_callback_null;
+	cbs->ping      = libtwirc_callback_null;
+	cbs->join      = libtwirc_callback_null;
+	cbs->part      = libtwirc_callback_null;
+	cbs->channel   = libtwirc_callback_null;
+	cbs->privmsg   = libtwirc_callback_null;
+	cbs->whisper   = libtwirc_callback_null;
+	cbs->notice    = libtwirc_callback_null;
+	cbs->clearchat = libtwirc_callback_null;
+	cbs->unknown   = libtwirc_callback_null;
+}
+
+/*
+ * 
+ */
+struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s)
+{
+	return &s->callbacks;
+}
+
+/*
  * Set the state's events member to the given pointer.
  */
 void twirc_set_callbacks(struct twirc_state *s, struct twirc_callbacks *cbs)
 {
+	// TODO we want to make sure that every callback that the user did
+	// not assign a function to, we instead assign our dummy callback 
+	// function to, so that calling the callbacks does not require NULL
+	// checks every single time. What's the best way of doing this?	
+
 	memcpy(&s->callbacks, cbs, sizeof(struct twirc_callbacks));
 }
 
 /*
  * TODO comment
  */
-struct twirc_state* twirc_init(struct twirc_callbacks *cbs)
+struct twirc_state* twirc_init()
 {
-	// TODO something in here leaks! I'm not sure what, the line numbers
-	// given by valgrind were comments, so it wasn't really accurate, but
-	// let's just carefully check everything in here, ya? cheers
-	
 	// Init state struct
 	struct twirc_state *state = malloc(sizeof(struct twirc_state));
 	memset(state, 0, sizeof(struct twirc_state));
@@ -336,19 +788,22 @@ struct twirc_state* twirc_init(struct twirc_callbacks *cbs)
 	// easily hold an incomplete message in addition to a complete one
 	state->buffer = malloc(2 * TWIRC_MESSAGE_SIZE * sizeof(char));
 	state->buffer[0] = '\0';
-	
+
 	// Make sure the structs within state are zero-initialized
 	memset(&state->login, 0, sizeof(struct twirc_login));
 	memset(&state->callbacks, 0, sizeof(struct twirc_callbacks));
 
+	// Set all callbacks to the dummy callback
+	twirc_init_callbacks(&state->callbacks);
+
 	// Copy the provided events 
-	twirc_set_callbacks(state, cbs);
+	//twirc_set_callbacks(state, &cbs);
 
 	// All done
 	return state;
 }
 
-int twirc_free_events(struct twirc_state *state)
+int twirc_free_callbacks(struct twirc_state *state)
 {
 	// TODO free all the members!
 	// free(callbacks->events->...);
@@ -370,7 +825,7 @@ int twirc_free_login(struct twirc_state *state)
  */
 int twirc_free(struct twirc_state *state)
 {
-	twirc_free_events(state);
+	twirc_free_callbacks(state);
 	twirc_free_login(state);
 	free(state->buffer);
 	free(state);
@@ -855,6 +1310,64 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 	return NULL;
 }
 
+/*
+ * TODO
+ * Supposed to be called from libtwirc_process_msg() and do all the work of
+ * checking what command the event was and then dispatch internal and user
+ * event handler functions accordingly.
+ */
+int libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
+{
+	// Some temporary test code (the first bit is important tho)
+	if (strcmp(evt->command, "001") == 0)
+	{
+		libtwirc_on_welcome(state, evt);
+		state->callbacks.welcome(state, evt);
+		return 0;
+	}
+	if (strcmp(evt->command, "JOIN") == 0)
+	{
+		evt->channel = evt->params[0];
+		state->callbacks.join(state, evt);
+		return 0;
+	}
+	if (strcmp(evt->command, "PING") == 0)
+	{
+		libtwirc_on_ping(state, evt);
+		state->callbacks.ping(state, evt);
+		return 0;
+	}
+	if (strcmp(evt->command, "PRIVMSG") == 0 && evt->num_params >= 2)
+	{
+		evt->channel = evt->params[0];
+
+		if (evt->params[1][0] == 0x01 && evt->params[1][strlen(evt->params[1])-1] == 0x01)
+		{
+			// TODO deal with CTCP
+			//fprintf(stderr, "[!] CTCP detected\n");
+		}
+		else
+		{
+			state->callbacks.privmsg(state, evt);
+		}
+		return 0;
+	}
+	if (strcmp(evt->command, "CLEARCHAT") == 0)
+	{
+		libtwirc_on_clearchat(state, evt);
+		state->callbacks.clearchat(state, evt);
+		return 0;
+	}
+	if (strcmp(evt->command, "WHISPER") == 0)
+	{
+		libtwirc_on_whisper(state, evt);
+		state->callbacks.whisper(state, evt);
+		return 0;
+	}
+	
+	return -1;
+}
+
 // TODO
 int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 {
@@ -870,7 +1383,7 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	msg = libtwirc_parse_prefix(msg, &(evt.prefix));
 	//fprintf(stderr, ">>> prefix: %s\n", prefix);
 
-	// Extract the command
+	// Extract the command, always
 	msg = libtwirc_parse_command(msg, &(evt.command));
 	//fprintf(stderr, ">>> cmd: %s\n", cmd);
 
@@ -878,55 +1391,12 @@ int libtwirc_process_msg(struct twirc_state *state, const char *msg)
 	msg = libtwirc_parse_params(msg, &(evt.params), &(evt.num_params), &(evt.trailing));
 	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 
+	// Extract the nick from the prefix, maybe
+	evt.nick = evt.prefix == NULL ? NULL : libtwirc_prefix_to_nick(evt.prefix);
+	
 	//fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
 
-	evt.nick = evt.prefix == NULL ? NULL : libtwirc_prefix_to_nick(evt.prefix);
-
-	// Some temporary test code (the first bit is important tho)
-	if (strcmp(evt.command, "001") == 0)
-	{
-		//state->status |= TWIRC_STATUS_AUTHENTICATED;
-		libtwirc_on_welcome(state, &evt);
-		if (state->callbacks.welcome != NULL)
-		{
-			state->callbacks.welcome(state, &evt);
-		}
-
-	}
-	if (strcmp(evt.command, "JOIN") == 0)
-	{
-		if (state->callbacks.join != NULL)
-		{
-			evt.channel = evt.params[0];
-			state->callbacks.join(state, &evt);
-		}
-
-	}
-	if (strcmp(evt.command, "PING") == 0)
-	{
-		libtwirc_on_ping(state, &evt);
-		if (state->callbacks.ping != NULL)
-		{
-			state->callbacks.ping(state, &evt);
-		}
-	}
-	if (strcmp(evt.command, "PRIVMSG") == 0 && evt.num_params >= 2)
-	{
-		evt.channel = evt.params[0];
-
-		if (evt.params[1][0] == 0x01 && evt.params[1][strlen(evt.params[1])-1] == 0x01)
-		{
-			// TODO deal with CTCP
-			//fprintf(stderr, "[!] CTCP detected\n");
-		}
-		else
-		{
-			if (state->callbacks.privmsg != NULL)
-			{
-				state->callbacks.privmsg(state, &evt);
-			}
-		}
-	}
+	libtwirc_dispatch_evt(state, &evt);
 
 	// Free resources from parsed message
 	libtwirc_free_tags(evt.tags);
@@ -1011,7 +1481,7 @@ int twirc_capreq(struct twirc_state *s)
 	twirc_cmd_req_tags(s);
 	twirc_cmd_req_membership(s);
 	twirc_cmd_req_commands(s);
-	twirc_cmd_req_chatrooms(s);
+	//twirc_cmd_req_chatrooms(s);
 	return 0;
 }
 
