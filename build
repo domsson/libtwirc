@@ -1,1 +1,1 @@
-gcc src/kaul.c src/tcpsnob.c src/libtwirc.c -o bin/kaul -DBUILD=$(date +"%g%m%d.%H%M%S")
+gcc src/kaul.c src/tcpsnob/tcpsnob.c src/libtwirc.c -o bin/kaul -DBUILD=$(date +"%g%m%d.%H%M%S")
