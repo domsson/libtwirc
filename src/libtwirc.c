@@ -9,7 +9,7 @@
 #include <sys/types.h>	// ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
-#include "tcpsnob.c"
+#include "tcpsnob.h"
 #include "libtwirc.h"
 
 /*

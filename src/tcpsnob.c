@@ -1,10 +1,11 @@
 #include <stdlib.h>     // NULL, EXIT_FAILURE, EXIT_SUCCESS
 #include <unistd.h>     // close(), fcntl()
+#include <errno.h>      // errno
 #include <fcntl.h>      // fcntl()
 #include <sys/types.h>  // ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <netdb.h>      // getaddrinfo()
-#include <tcpsnob.h>
+#include "tcpsnob.h"
 
 /*
  * Creates a non-blocking TCP socket, either IPv4 or IPv6, depending on ip_type.
