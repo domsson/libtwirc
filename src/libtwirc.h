@@ -1,6 +1,7 @@
 #ifndef LIBTWIRC_H
 #define LIBTWIRC_H
 
+// Name & Version
 #define TWIRC_NAME "libtwirc"
 #define TWIRC_VER_MAJOR 0
 #define TWIRC_VER_MINOR 1
@@ -10,14 +11,29 @@
 	#define TWIRC_VER_BUILD 0.0
 #endif
 
+// Convenience
 #define TWIRC_IPV4 AF_INET
 #define TWIRC_IPV6 AF_INET6
 
-#define TWIRC_STATUS_DISCONNECTED   0
-#define TWIRC_STATUS_CONNECTING     1
-#define TWIRC_STATUS_CONNECTED      2
-#define TWIRC_STATUS_AUTHENTICATING 4
-#define TWIRC_STATUS_AUTHENTICATED  8
+// State (bitfield)
+#define TWIRC_STATUS_DISCONNECTED    0
+#define TWIRC_STATUS_CONNECTING      1
+#define TWIRC_STATUS_CONNECTED       2
+#define TWIRC_STATUS_AUTHENTICATING  4
+#define TWIRC_STATUS_AUTHENTICATED   8
+
+// Errors
+#define TWIRC_ERR_OUT_OF_MEMORY     -2
+#define TWIRC_ERR_SOCKET_CREATE     -3
+#define TWIRC_ERR_SOCKET_CONNECT    -4
+#define TWIRC_ERR_SOCKET_SEND       -5
+#define TWIRC_ERR_SOCKET_RECV       -6
+#define TWIRC_ERR_SOCKET_CLOSE      -7
+#define TWIRC_ERR_EPOLL_CREATE      -8
+#define TWIRC_ERR_EPOLL_CTL         -9
+#define TWIRC_ERR_IP_LOOKUP        -10
+
+
 
 // Message size needs to be large enough to accomodate a single IRC message 
 // from the Twitch servers. Twitch limits the visible chat message part of 
@@ -130,8 +146,8 @@ struct twirc_event
 	// For convenience
 	char *nick;
 	char *channel;
-	char *message;  // Actual text/chat message
-	char *ctcp;	// CTCP commmand, if any
+	char *message;                     // Actual text/chat message
+	char *ctcp;	                       // CTCP commmand, if any
 };
 
 struct twirc_caps
@@ -141,35 +157,30 @@ struct twirc_caps
 	int commands: 1;
 };
 
-// <message> ::= ['@' <tags> <SPACE>] [':' <prefix> <SPACE> ] <command> <params> <crlf>
-// Also, we might want to extract "nick" and "chan" from params, as these two will be in
-// there pretty often - and most likely relevant for the user.
-//
-// (struct twirc_state *s, const char *cmd, const struct twirc_tag **tags, const char *prefix, const char **params) 
 typedef void (*twirc_callback)(struct twirc_state *s, const struct twirc_event *msg);
 
 struct twirc_callbacks
 {
-	twirc_callback connect;         // connection established
-	twirc_callback welcome;         // 001 received (logged in)
-	twirc_callback globaluserstate; // logged in (+ user info)
-	twirc_callback ping;            // PING received
+	twirc_callback connect;            // connection established
+	twirc_callback welcome;            // 001 received (logged in)
+	twirc_callback globaluserstate;    // logged in (+ user info)
+	twirc_callback ping;               // PING received
 	twirc_callback join;
 	twirc_callback part;
 	twirc_callback channel;
 	twirc_callback privmsg;
 	twirc_callback whisper;
 	twirc_callback notice;
-	twirc_callback clearchat;	// temp/perm ban
-	twirc_callback action;          // CTCP ACTION received
-	twirc_callback disconnect;	// connection interrupted
+	twirc_callback clearchat;          // temp/perm ban
+	twirc_callback action;             // CTCP ACTION received
+	twirc_callback disconnect;         // connection interrupted
 	twirc_callback unknown;
 };
 
 struct twirc_state
 {
 	int status : 8;                    // connection status
-	int running;                       // are we running in a loop?
+	int running : 1;                   // are we running in a loop?
 	int ip_type;                       // ip type, ipv4 or ipv6
 	int socket_fd;                     // tcp socket file descriptor
 	char *buffer;                      // irc message buffer
@@ -177,6 +188,7 @@ struct twirc_state
 	struct twirc_user user;            // twitch user details
 	struct twirc_callbacks cbs;        // event callbacks
 	int epfd;                          // epoll file descriptor
+	int error;                         // last error that occured
 };
 
 struct twirc_state *twirc_init();

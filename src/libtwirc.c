@@ -67,7 +67,7 @@ int twirc_connect(struct twirc_state *state, const char *host, const char *port,
 
 /*
  * Sends data to the IRC server, using the state's socket.
- * On succcess, returns the number of bytes sent.
+ * On success, returns the number of bytes sent.
  * On error, -1 is returned and errno is set appropriately.
  */
 int twirc_send(struct twirc_state *state, const char *msg)
