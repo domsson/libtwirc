@@ -33,7 +33,10 @@
 #define TWIRC_ERR_EPOLL_CTL         -9
 #define TWIRC_ERR_IP_LOOKUP        -10
 
-
+// Maybe we should do this, too:
+// https://github.com/shaoner/libircclient/blob/master/include/libirc_rfcnumeric.h
+// Good source is:
+// https://www.alien.net.au/irc/irc2numerics.html
 
 // Message size needs to be large enough to accomodate a single IRC message 
 // from the Twitch servers. Twitch limits the visible chat message part of 
