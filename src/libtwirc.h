@@ -179,10 +179,8 @@ struct twirc_state
 	int epfd;                          // epoll file descriptor
 };
 
-//struct twirc_state* twirc_init(struct twirc_callbacks *c);
 struct twirc_state *twirc_init();
 struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s);
-void twirc_set_callbacks(struct twirc_state *s, struct twirc_callbacks *c);
 
 int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *pass, const char *nick);
 int twirc_disconnect(struct twirc_state *s);
