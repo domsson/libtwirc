@@ -1,19 +1,19 @@
-#include <stdlib.h>	// NULL, EXIT_FAILURE, EXIT_SUCCESS
-#include <unistd.h>	// close(), fcntl()
-#include <fcntl.h>	// fcntl()
-#include <sys/types.h>	// ssize_t
+#include <stdlib.h>     // NULL, EXIT_FAILURE, EXIT_SUCCESS
+#include <unistd.h>     // close(), fcntl()
+#include <fcntl.h>      // fcntl()
+#include <sys/types.h>  // ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
-#include <netdb.h>	// getaddrinfo()
+#include <netdb.h>      // getaddrinfo()
+#include <tcpsnob.h>
 
 /*
  * Creates a non-blocking TCP socket, either IPv4 or IPv6, depending on ip_type.
  * If the given ip_type is neither AF_INET nor AF_INET6, AF_INET (IPv4) is used.
- * Returns the socket's file descriptor on success.
- * Returns -1 if socket() failed to create a socket, check errno.
- * Returns -2 if fcntl() failed to get the file descriptor flags, check errno.
- * Returns -3 if fcntl() failed to set the file descriptor flags, check errno.
+ * Returns the socket's file descriptor on success or -1 on error. Check errno.
+ * In case of error, either we failed to create a socket via socket(), or a call
+ * to fcntl(), in an attempt to get or set the file descriptor flags, failed.
  */
-int stcpnb_create(int ip_type)
+int tcpsnob_create(int ip_type)
 {
 	// If ip_type was neither IPv4 nor IPv6, we fall back to IPv4
 	if ((ip_type != AF_INET) && (ip_type != AF_INET6))
@@ -35,14 +35,14 @@ int stcpnb_create(int ip_type)
 	int get = fcntl(sfd, F_GETFL);
 	if (get == -1)
 	{
-		return -2;
+		return -1;
 	}
 
 	// Add O_NONBLOCK to the file descriptor flags
 	int set = fcntl(sfd, F_SETFL, get | O_NONBLOCK);
 	if (set == -1)
 	{
-		return -3;
+		return -1;
 	}
 
 	// All done, return socket file descriptor
@@ -53,11 +53,11 @@ int stcpnb_create(int ip_type)
  * Initiates a connection for the TCP socket described by sockfd.
  * The ip_type should match the one used when the socket was created.
  * If the given ip_type is neither AF_INET nor AF_INET6, AF_INET (IPv4) is used.
- * Returns  0 if the connection was successfully initiated (is now in progress).
- * Returns -1 if connect() failed, in which case errno will be set.
- * Returns -2 if getaddrinfo() failed to translate host/port to an IP.
+ * Returns 0 if the connection was successfully initiated (is now in progress).
+ * Returns -1 if the host/port could not be translated into an IP address or if 
+ * the connection could not be established for some other reason.
  */
-int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
+int tcpsnob_connect(int sockfd, int ip_type, const char *host, const char *port)
 {
 	// If ip_type was neither IPv4 nor IPv6, we fall back to IPv4
 	if ((ip_type != AF_INET) && (ip_type != AF_INET6))
@@ -68,7 +68,7 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
 	// Not initializing the struct with { 0 } will result in garbage values
 	// that can (but not necessarily will) make getaddrinfo() fail!
 	struct addrinfo hints = { 0 };
-        hints.ai_family   = ip_type;
+	hints.ai_family   = ip_type;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
@@ -81,7 +81,7 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
 		{
 			freeaddrinfo(info);
 		}
-		return -2;
+		return -1;
 	}
 
 	// Attempt to initiate a connection
@@ -96,7 +96,7 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
 		{
 			return 0;
 		}
-		// Some other error occured (damn)
+		// Some other error occured (errno will be set)
 		return -1;
 	}
 
@@ -112,11 +112,11 @@ int stcpnb_connect(int sockfd, int ip_type, const char *host, const char *port)
  * previous connection attempt succeeded, you should simply use select(), 
  * poll() or epoll() to wait on the socket and see if it becomes ready for 
  * writing (sending); this indicates the socket connection is established.
- * Returns  0 if the socket is healthy and probably connected.
- * Returns -1 if the socket reported an error and is probably disconnected.
- * Returns -2 if the socket status could not be queried.
+ * Returns 0 if the socket is healthy and most likely connected.
+ * Returns -1 if the socket reported an error or the socket status could not
+ * be queried, both indicating that the socket is most likely not connected.
  */
-int stcpnb_status(int sockfd)
+int tcpsnob_status(int sockfd)
 {
 	int err = 0;
 	socklen_t len = sizeof(err);
@@ -124,7 +124,7 @@ int stcpnb_status(int sockfd)
 	if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &err, &len) != 0)
 	{
 		// Could not get the socket's status, invalid file descriptor?
-		return -2;
+		return -1;
 	}
 
 	if (err != 0)
@@ -143,7 +143,7 @@ int stcpnb_status(int sockfd)
  * On error, -1 is returned and errno is set appropriately.
  * See the man page of send() for more details.
  */
-int stcpnb_send(int sockfd, const char *msg, size_t len)
+int tcpsnob_send(int sockfd, const char *msg, size_t len)
 {
 	return send(sockfd, msg, len, 0);
 }
@@ -153,10 +153,10 @@ int stcpnb_send(int sockfd, const char *msg, size_t len)
  * On success, this function returns the number of bytes received.
  * On error, -1 is returend and errno is set appropriately.
  * Returns 0 if the if the socket connection was shut down by peer
- * or if the requested number of bytes to receives from the socket was 0.
+ * or if the requested number of bytes to receive from the socket was 0.
  * See the man page of recv() for more details.
  */
-int stcpnb_receive(int sockfd, char *buf, size_t len)
+int tcpsnob_receive(int sockfd, char *buf, size_t len)
 {
 	return recv(sockfd, buf, len, 0);
 }
@@ -166,7 +166,7 @@ int stcpnb_receive(int sockfd, char *buf, size_t len)
  * Returns 0 on success, -1 on error (see errno).
  * See the man page of close() for more details.
  */
-int stcpnb_close(int sockfd)
+int tcpsnob_close(int sockfd)
 {
 	return close(sockfd);
 }

@@ -9,7 +9,7 @@
 #include <sys/types.h>	// ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
-#include "stcpnb.c"
+#include "tcpsnob.c"
 #include "libtwirc.h"
 
 /*
@@ -23,7 +23,7 @@
 int twirc_connect(struct twirc_state *state, const char *host, const char *port, const char *pass, const char *nick)
 {
 	// Create socket
-	state->socket_fd = stcpnb_create(state->ip_type);
+	state->socket_fd = tcpsnob_create(state->ip_type);
 	if (state->socket_fd < 0)
 	{
 		// Socket could not be created
@@ -57,7 +57,7 @@ int twirc_connect(struct twirc_state *state, const char *host, const char *port,
 	state->login.pass = strdup(pass);
 
 	// Connect the socket
-	int con = stcpnb_connect(state->socket_fd, state->ip_type, host, port);
+	int con = tcpsnob_connect(state->socket_fd, state->ip_type, host, port);
 	if (con == 0)
 	{
 		state->status = TWIRC_STATUS_CONNECTING;
@@ -95,7 +95,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
 		fprintf(stderr, "< %s", buf);
 	}
 
-	int ret = stcpnb_send(state->socket_fd, buf, buf_len);
+	int ret = tcpsnob_send(state->socket_fd, buf, buf_len);
 	free(buf);
 
 	return ret;
@@ -117,7 +117,7 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 	
 	// Receive data
 	ssize_t res_len;
-	res_len = stcpnb_receive(state->socket_fd, buf, len - 1);
+	res_len = tcpsnob_receive(state->socket_fd, buf, len - 1);
 
 	// Make sure that the data received is null terminated
 	buf[res_len] = '\0'; // TODO Do we need this? we already memset()
@@ -820,7 +820,7 @@ int twirc_auth(struct twirc_state *state)
 int twirc_disconnect(struct twirc_state *state)
 {
 	twirc_cmd_quit(state);
-	int ret = stcpnb_close(state->socket_fd);
+	int ret = tcpsnob_close(state->socket_fd);
 	state->status = TWIRC_STATUS_DISCONNECTED;
 	return ret;
 }
