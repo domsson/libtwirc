@@ -1,15 +1,15 @@
-#include <stdio.h>	// NULL, fprintf(), perror()
-#include <stdlib.h>	// NULL, EXIT_FAILURE, EXIT_SUCCESS
-#include <errno.h>	// errno
-#include <netdb.h>	// getaddrinfo()
-#include <unistd.h>	// close(), fcntl()
-#include <string.h>	// strlen(), strerror()
-#include <fcntl.h>	// fcntl()
-#include <ctype.h>	// isspace()
-#include <sys/types.h>	// ssize_t
+#include <stdio.h>      // NULL, fprintf(), perror()
+#include <stdlib.h>     // NULL, EXIT_FAILURE, EXIT_SUCCESS
+#include <errno.h>      // errno
+#include <netdb.h>      // getaddrinfo()
+#include <unistd.h>     // close(), fcntl()
+#include <string.h>     // strlen(), strerror()
+#include <fcntl.h>      // fcntl()
+#include <ctype.h>      // isspace()
+#include <sys/types.h>  // ssize_t
 #include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
-#include "tcpsnob.h"
+#include "tcpsnob/tcpsnob.h"
 #include "libtwirc.h"
 
 /*
@@ -1660,7 +1660,6 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	return 0; // TODO
 }
 
-
 /*
  * Handles the epoll event epev.
  * Returns 0 on success, -1 if the connection has been interrupted.
@@ -1688,6 +1687,13 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 		// If we weren't connected yet, we seem to be now!
 		if (s->status & TWIRC_STATUS_CONNECTING)
 		{
+			
+			// Socket really connected?
+			if (tcpsnob_status(s->socket_fd) != 0)
+			{
+				return 0; // or -1?
+			}
+			
 			//fprintf(stderr, "Connection established!\n");
 			
 			// Call internal connect event handler

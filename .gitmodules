@@ -1,0 +1,3 @@
+[submodule "src/tcpsnob"]
+	path = src/tcpsnob
+	url = https://github.com/domsson/tcpsnob.git
