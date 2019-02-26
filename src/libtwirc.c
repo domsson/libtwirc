@@ -1812,6 +1812,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 			 errno == ECONNREFUSED ||  // Connection refused
 			 errno == ENOTCONN))       // Socket not connected
 		{
+			// TODO don't we need to call disconnect event handlers here?
 			s->error = TWIRC_ERR_SOCKET_RECV;
 			return -1;
 		}
@@ -1881,6 +1882,11 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	// An error has occured
 	if (num_events == -1)
 	{
+		// TODO shouldn't we check if we're already connected and, if so,
+		//      call the disconnect event handlers here? Or maybe not, as
+		//      an error in epoll_wait doesn't necessarily mean that we 
+		//      actually lost our connection - but how should we handle
+		//      this (hopefully rather exotic) situation properly?
 		s->error = TWIRC_ERR_EPOLL_WAIT;
 		s->running = 0;
 		return -1;
@@ -1898,7 +1904,14 @@ int twirc_tick(struct twirc_state *s, int timeout)
 /*
  * Runs an endless loop that waits for events timeout milliseconds at a time.
  * Once the connection has been closed or the state's running field has been 
- * set to 0, the loops is ended and this function returns with a value of 0.
+ * set to 0, the loop is ended and this function returns with a value of 0.
+ * TODO: the code doesn't actually respect the above comment: we run as long
+ *       as 'running' is set to 1, we don't even check the return value of 
+ *       twirc_tick() - however, isn't it too much to check for both anyway?
+ *       Can't we just do: `while(twirc_tick() == 0)` instead and drop the 
+ *       running flag altogether? Or the other way round, make sure that if 
+ *       the connection is dropped OR an error occurs, the running flag is 
+ *       always set to 0 for sure (maybe that's already the case, probably)
  */
 int twirc_loop(struct twirc_state *state, int timeout)
 {
@@ -1914,4 +1927,3 @@ int twirc_loop(struct twirc_state *state, int timeout)
 	}
 	return 0;
 }
-
