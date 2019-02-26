@@ -156,7 +156,7 @@ int main(void)
 	}
 
 	// CONNECT TO THE IRC SERVER
-	if (twirc_connect(s, "irc.chat.twitch.tv", "6667", token, "kaulmate") != 0)
+	if (twirc_connect(s, "irc.chat.twitch.tv", "6667", "kaulmate", token) != 0)
 	{
 		fprintf(stderr, "Could not connect socket\n");
 		return EXIT_FAILURE;
