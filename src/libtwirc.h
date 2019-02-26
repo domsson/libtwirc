@@ -31,7 +31,10 @@
 #define TWIRC_ERR_SOCKET_CLOSE      -7
 #define TWIRC_ERR_EPOLL_CREATE      -8
 #define TWIRC_ERR_EPOLL_CTL         -9
-#define TWIRC_ERR_IP_LOOKUP        -10
+#define TWIRC_ERR_EPOLL_WAIT       -10
+#define TWIRC_ERR_CONN_CLOSED      -11 // Connection lost: peer closed it
+#define TWIRC_ERR_CONN_HANGUP      -12 // Connection lost: unexpectedly
+#define TWIRC_ERR_CONN_SOCKET      -13 // Connection lost: socket error
 
 // Maybe we should do this, too:
 // https://github.com/shaoner/libircclient/blob/master/include/libirc_rfcnumeric.h
@@ -128,6 +131,13 @@ struct twirc_tag
 };
 
 // https://pastebin.com/qzzvpuB6
+// TODO come up with a solution of how to hand the relevant meta data 
+//      of certain events to the user (in the callbacks) without adding
+//      a dozen function arguments; maybe use a twirc_tags struct that
+//      contains one member for each possible tag? But there are plenty!
+//      Alternatively, have two to three dedicated structs that will be
+//      set or be NULL depending on the type of event? For example, one 
+//      struct twirc_message_details, one struct twirc_user_details?
 /*
 struct twirc_tags
 {
@@ -138,21 +148,22 @@ struct twirc_tags
 struct twirc_event
 {
 	// 'Raw' data
-	char *prefix;
-	char *command;
-	char **params;
-	size_t num_params;
-	int trailing;
-	struct twirc_tag **tags;
-	size_t num_tags;
+	char *prefix;                      // IRC message prefix
+	char *command;                     // IRC message command
+	char **params;                     // IRC message parameter
+	size_t num_params;                 // Number of elements in params
+	int trailing;                      // Index of the trailing param
+	struct twirc_tag **tags;           // IRC message tags
+	size_t num_tags;                   // Number of elements in tags
 	
 	// For convenience
-	char *nick;
-	char *channel;
-	char *message;                     // Actual text/chat message
+	char *nick;                        // Nick as extracted from prefix
+	char *channel;                     // Channel as extracted from params
+	char *message;                     // Message as extracted from params
 	char *ctcp;	                       // CTCP commmand, if any
 };
 
+// TODO: Not (yet) in use -- maybe we don't need it either?
 struct twirc_caps
 {
 	int tags : 1;
@@ -160,24 +171,33 @@ struct twirc_caps
 	int commands: 1;
 };
 
-typedef void (*twirc_callback)(struct twirc_state *s, const struct twirc_event *msg);
+typedef void (*twirc_callback)(struct twirc_state *s, struct twirc_event *e);
 
 struct twirc_callbacks
 {
-	twirc_callback connect;            // connection established
+	twirc_callback connect;            // Connection established
 	twirc_callback welcome;            // 001 received (logged in)
-	twirc_callback globaluserstate;    // logged in (+ user info)
+	twirc_callback globaluserstate;    // Logged in (+ user info)
+	twirc_callback capack;             // Capabilities acknowledged
 	twirc_callback ping;               // PING received
-	twirc_callback join;
-	twirc_callback part;
-	twirc_callback channel;
-	twirc_callback privmsg;
-	twirc_callback whisper;
-	twirc_callback notice;
-	twirc_callback clearchat;          // temp/perm ban
+	twirc_callback join;               // User joined a channel
+	twirc_callback part;               // User left a channel
+	twirc_callback mode;               // User gained/lost mod status
+	twirc_callback names;              // Reply to /NAMES command
+	twirc_callback privmsg;            // Regular chat message in a channel
+	twirc_callback whisper;            // Whisper (private message)
 	twirc_callback action;             // CTCP ACTION received
-	twirc_callback disconnect;         // connection interrupted
-	twirc_callback unknown;
+	twirc_callback notice;             // Notice from server
+	twirc_callback roomstate;          // Channel setting changed OR join
+	twirc_callback usernotice;         // Sub, resub, giftsub, raid, ritual
+	twirc_callback userstate;          // User joins or chats in channel (?)
+	twirc_callback clearchat;          // User was banned (temp or perm)
+	twirc_callback clearmsg;           // A chat message has been removed
+	twirc_callback hosttarget;         // Channel starts or stops host mode
+	twirc_callback reconnect;          // Server is going for a restart soon
+	twirc_callback disconnect;         // Connection interrupted
+	twirc_callback unknowncmd;         // Server doesn't recognise command
+	twirc_callback other;              // Everything else (for now)
 };
 
 struct twirc_state

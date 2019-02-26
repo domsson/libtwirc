@@ -13,56 +13,57 @@
 #include "libtwirc.h"
 
 /*
- * Initiates a connection with the given server.
- * Returns  0 if connection is in progress
- * Returns -1 if connection attempt failed (check errno!)
- * Returns -2 if host/port could not be resolved to IP
- * TODO need more return values because epoll initalization is now in here
- *      or maybe handle errors in an entirely different way, I don't know
+ * Initiates a connection with the given server using the given credentials.
+ * Returns 0 if the connection process has started and is now in progress, 
+ * -1 if the connection attempt failed (check the state's error and errno).
  */
-int twirc_connect(struct twirc_state *state, const char *host, const char *port, const char *pass, const char *nick)
+int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *pass, const char *nick)
 {
 	// Create socket
-	state->socket_fd = tcpsnob_create(state->ip_type);
-	if (state->socket_fd < 0)
+	s->socket_fd = tcpsnob_create(s->ip_type);
+	if (s->socket_fd < 0)
 	{
-		// Socket could not be created
-		return -3;
+		s->error = TWIRC_ERR_SOCKET_CREATE;
+		return -1;
 	}
 
 	// Create epoll instance 
-	state->epfd = epoll_create(1);
-	if (state->epfd < 0)
+	s->epfd = epoll_create(1);
+	if (s->epfd < 0)
 	{
-		// Could not create epoll instance / file descriptor
-		return -4;
+		s->error = TWIRC_ERR_EPOLL_CREATE;
+		return -1;
 	}
 
 	// Set up the epoll instance
 	struct epoll_event eev = { 0 };
-	eev.data.ptr = state;
+	eev.data.ptr = s;
 	eev.events = EPOLLRDHUP | EPOLLOUT | EPOLLIN | EPOLLET;
-	int epctl_result = epoll_ctl(state->epfd, EPOLL_CTL_ADD, state->socket_fd, &eev);
+	int epctl_result = epoll_ctl(s->epfd, EPOLL_CTL_ADD, s->socket_fd, &eev);
 	
 	if (epctl_result)
 	{
 		// Socket could not be registered for IO
-		return -5;
+		s->error = TWIRC_ERR_EPOLL_CTL;
+		return -1;
 	}
 
 	// Properly initialize the login struct and copy the login data into it
-	state->login.host = strdup(host);
-	state->login.port = strdup(port);
-	state->login.nick = strdup(nick);
-	state->login.pass = strdup(pass);
+	s->login.host = strdup(host);
+	s->login.port = strdup(port);
+	s->login.nick = strdup(nick);
+	s->login.pass = strdup(pass);
 
-	// Connect the socket
-	int con = tcpsnob_connect(state->socket_fd, state->ip_type, host, port);
-	if (con == 0)
+	// Connect the socket (and handle a possible connection error)
+	if (tcpsnob_connect(s->socket_fd, s->ip_type, host, port) == -1)
 	{
-		state->status = TWIRC_STATUS_CONNECTING;
+		s->error = TWIRC_ERR_SOCKET_CONNECT;
+		return -1;
 	}
-	return con;
+
+	// We are connected!
+	s->status = TWIRC_STATUS_CONNECTING;
+	return 0;
 }
 
 /*
@@ -101,7 +102,6 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	return ret;
 }
 
-// https://faq.cprogramming.com/cgi-bin/smartfaq.cgi?id=1044780608&answer=1108255660
 /*
  * Reads data from the socket and puts it into buf.
  * On success, returns the number of bytes read.
@@ -119,43 +119,22 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 	ssize_t res_len;
 	res_len = tcpsnob_receive(state->socket_fd, buf, len - 1);
 
-	// Make sure that the data received is null terminated
-	buf[res_len] = '\0'; // TODO Do we need this? we already memset()
-
+	// Check if tcpsno_receive() reported an error
 	if (res_len == -1)
 	{
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 		{
-			// No more data to read right now!
+			// Simply no more data to read right now - all good
 			return 0;
 		}
+		// Every other error, however, indicates some serious problem
 		return -1;
-		/*
-		if (errno == EBADF)
-		{
-			fprintf(stderr, "(Invalid socket)\n");
-		}
-		if (errno == ECONNREFUSED)
-		{
-			fprintf(stderr, "(Connection refused)\n");
-		}
-		if (errno == EFAULT)
-		{
-			fprintf(stderr, "(Buffer error)\n");
-		}
-		if (errno == ENOTCONN)
-		{
-			fprintf(stderr, "(Socket not connected)\n");
-		}
-		*/	
 	}
+	
+	// Make super-sure that the data received is null terminated
+	buf[res_len] = '\0';
 
-	/* 
-	if (res_len >= len)
-	{
-		fprintf(stderr, "twirc_recv: (message truncated)");
-	}
-	*/
+	// Return the number of bytes received
 	return res_len;
 }
 
@@ -174,7 +153,6 @@ int twirc_is_logged_in(const struct twirc_state *state)
 {
 	return state->status & TWIRC_STATUS_AUTHENTICATED ? 1 : 0;
 }
-
 
 /*
  * Sends the PASS command to the server, with the pass appended as parameter.
@@ -355,14 +333,15 @@ int twirc_capreq(struct twirc_state *s)
  * This dummy callback function does absolutely nothing.
  * However, it allows us to make sure that all callbacks are non-NULL, removing 
  * the need to check for NULL everytime before we call them. On the other hand,
- * this does introduce the overhead of a function call instead of a NULL-check,
- * however. This is probably worse, performance-wise, but as long we don't run
- * into performance problems, I prefer this as it makes for a much leaner code.
+ * this does introduce the overhead of a function call instead of a NULL-check.
+ * This is probably worse, performance-wise, but as long we don't run into any
+ * performance problems, I prefer this as it makes for a much leaner code. 
+ * Maybe `static inline` enables the compiler to optimize the overhead.
  */
 static inline
-void libtwirc_callback_null(struct twirc_state *s, const struct twirc_event *evt)
+void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
 {
-	// Nothing to do here. That's on purpose.
+	// Nothing in here. That's on purpose.
 }
 
 /*
@@ -414,7 +393,7 @@ void libtwirc_on_ping(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -425,7 +404,7 @@ void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -449,7 +428,7 @@ void libtwirc_on_names(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -458,10 +437,13 @@ void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
  *
  * ban-duration: (Optional) Duration of the timeout, in seconds.
  *               If omitted, the ban is permanent.
+ * 
+ * TODO: Figure out how we can know WHO banned <user>
+ *       (as the prefix doesn't seem to contain the nick?)
  */
 void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -477,7 +459,7 @@ void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -496,13 +478,17 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	// TODO got to figure out the exact syntax:
+	//      - Channels without # ?
+	//      - number-of-viewers is '-' when not given?
+	//      - channel and number-of-viewers are together the trailing param?
+	evt->channel = evt->params[0];
 }
 
 /*
  * General notices from the server.
  *
- * > @msg-id=<msg id>:tmi.twitch.tv NOTICE #<channel> :<message>
+ * > @msg-id=<msg id> :tmi.twitch.tv NOTICE #<channel> :<message>
  *
  * message: The message.
  * msg id:  A message ID string. Can be used for i18ln. Valid values: 
@@ -516,7 +502,8 @@ void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_notice(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
+	evt->message = evt->params[evt->trailing];
 }
 
 /*
@@ -524,7 +511,8 @@ void libtwirc_on_notice(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_action(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
+	evt->message = evt->params[1];
 }
 
 /*
@@ -538,7 +526,7 @@ void libtwirc_on_action(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_reconnect(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	// Probably nothing to do here
 }
 
 /*
@@ -592,7 +580,8 @@ void libtwirc_on_reconnect(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
+	evt->message = evt->params[evt->trailing];
 }
 
 /*
@@ -622,7 +611,7 @@ void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_roomstate(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -709,7 +698,8 @@ void libtwirc_on_roomstate(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_usernotice(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
+	evt->message = evt->num_params > 1 ? evt->params[1] : NULL;
 }
 
 /*
@@ -734,7 +724,7 @@ void libtwirc_on_usernotice(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	evt->channel = evt->params[0];
 }
 
 /*
@@ -750,6 +740,14 @@ void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
  *   :domsson!domsson@domsson.tmi.twitch.tv WHISPER kaulmate :hey kaul!
  */
 void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
+{
+	evt->message = evt->params[evt->trailing];
+}
+
+/*
+ * Handles all events that do not (yet) have a dedicated event handler.
+ */
+void libtwirc_on_other(struct twirc_state *s, struct twirc_event *evt)
 {
 	// TODO
 }
@@ -771,15 +769,12 @@ void libtwirc_on_connect(struct twirc_state *s)
 		return;
 	}
 
-	// Request capabilities already, so that we'll receive the
-	// GLOBALUSERSTATE command once we're logged in, which seems
-	// a cleaner way to check for login than to use the MOTD
-	//fprintf(stderr, "Requesting capabilities...\n");
+	// Request capabilities before login, so that we will receive the
+	// GLOBALUSERSTATE command on login in addition to the 001 (WELCOME)
 	twirc_capreq(s);
 
-	//fprintf(stderr, "Authenticating...\n");
+	// Start authentication process (user login)
 	twirc_auth(s);
-	s->status |= TWIRC_STATUS_AUTHENTICATING;
 }
 
 void libtwirc_on_disconnect(struct twirc_state *s)
@@ -810,6 +805,8 @@ int twirc_auth(struct twirc_state *state)
 	{
 		return -1;
 	}
+	
+	s->status |= TWIRC_STATUS_AUTHENTICATING;
 	return 0;
 }
 
@@ -819,10 +816,22 @@ int twirc_auth(struct twirc_state *state)
  */ 
 int twirc_disconnect(struct twirc_state *state)
 {
+	// Say bye-bye to the IRC server
 	twirc_cmd_quit(state);
-	int ret = tcpsnob_close(state->socket_fd);
-	state->status = TWIRC_STATUS_DISCONNECTED;
-	return ret;
+	
+	// Close the socket
+	int err = tcpsnob_close(state->socket_fd);
+	
+	// Run the disconnect event handlers
+	libtwirc_on_disconnect(s);
+	s->cbs.disconnect(s, NULL);
+	
+	// Account for close() running into an error
+	if (err == -1)
+	{
+		s->error = TWIRC_ERR_SOCKET_CLOSE;
+	}
+	return err;
 }
 
 /*
@@ -831,20 +840,29 @@ int twirc_disconnect(struct twirc_state *state)
 void twirc_init_callbacks(struct twirc_callbacks *cbs)
 {
 	// TODO figure out if there is a more elegant and dynamic way...
-	cbs->connect         = libtwirc_callback_null;
-	cbs->welcome         = libtwirc_callback_null;
-	cbs->globaluserstate = libtwirc_callback_null;
-	cbs->ping            = libtwirc_callback_null;
-	cbs->join            = libtwirc_callback_null;
-	cbs->part            = libtwirc_callback_null;
-	cbs->channel         = libtwirc_callback_null;
-	cbs->privmsg         = libtwirc_callback_null;
-	cbs->whisper         = libtwirc_callback_null;
-	cbs->notice          = libtwirc_callback_null;
-	cbs->clearchat       = libtwirc_callback_null;
-	cbs->action          = libtwirc_callback_null;
-	cbs->disconnect      = libtwirc_callback_null;
-	cbs->unknown         = libtwirc_callback_null;
+	cbs->connect         = libtwirc_on_null;
+	cbs->welcome         = libtwirc_on_null;
+	cbs->globaluserstate = libtwirc_on_null;
+	cbs->capack          = libtwirc_on_null;
+	cbs->ping            = libtwirc_on_null;
+	cbs->join            = libtwirc_on_null;
+	cbs->part            = libtwirc_on_null;
+	cbs->mode            = libtwirc_on_null;
+	cbs->names           = libtwirc_on_null;
+	cbs->privmsg         = libtwirc_on_null;
+	cbs->whisper         = libtwirc_on_null;
+	cbs->action          = libtwirc_on_null;
+	cbs->notice          = libtwirc_on_null;
+	cbs->roomstate       = libtwirc_on_null;
+	cbs->usernotice      = libtwirc_on_null;
+	cbs->userstate       = libtwirc_on_null;
+	cbs->clearchat       = libtwirc_on_null;
+	cbs->clearmsg        = libtwirc_on_null;
+	cbs->hosttarget      = libtwirc_on_null;
+	cbs->reconnect       = libtwirc_on_null;
+	cbs->disconnect      = libtwirc_on_null;
+	cbs->unknowncmd      = libtwirc_on_null;
+	cbs->other           = libtwirc_on_null;
 }
 
 /*
@@ -853,7 +871,7 @@ void twirc_init_callbacks(struct twirc_callbacks *cbs)
  * Under no circumstances should the user set any callback to NULL, as this
  * will eventually lead to a segmentation fault, as libtwirc relies on the
  * fact that every callback that wasn't assigned to by the user is assigned
- * to an internal event handler.
+ * to an internal dummy (null) event handler.
  */
 struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s)
 {
@@ -877,6 +895,7 @@ struct twirc_state* twirc_init()
 	state->status    = TWIRC_STATUS_DISCONNECTED;
 	state->ip_type   = TWIRC_IPV4;
 	state->socket_fd = -1;
+	state->error     = 0;
 	
 	// Initialize the buffer - it will be twice the message size so it can
 	// easily hold an incomplete message in addition to a complete one
@@ -899,7 +918,7 @@ struct twirc_state* twirc_init()
 void libtwirc_free_callbacks(struct twirc_state *state)
 {
 	// We do not need to free the callback pointers, as they are function 
-	// pointers and were hence also not allocated with malloc() or similar.
+	// pointers and were therefore not allocated with malloc() or similar.
 	// However, let's make sure we 'forget' the currently assigned funcs.
 	memset(&state->cbs, 0, sizeof(struct twirc_callbacks));
 }
@@ -953,15 +972,16 @@ int twirc_kill(struct twirc_state *state)
 }
 
 /*
- * Copies a portion of src to dest. The copied part will start from the offset given
- * in off and end at the next null terminator encountered, but at most slen bytes. 
- * It is essential for slen to be correctly provided, as this function is supposed to
- * handle src strings that were network-transmitted and might not be null-terminated.
- * The copied string will be null terminated, even if no null terminator was read from
- * src. If dlen is not sufficient to store the copied string plus the null terminator,
- * or if the given offset points to the end or beyond src, -1 is returned.
- * Returns the number of bytes copied + 1, so this value can be used as an offset for 
- * successive calls of this function, or slen if all chunks have been read. 
+ * Copies a portion of src to dest. The copied part will start from the offset
+ * given in off and end at the next null terminator encountered, but at most 
+ * slen bytes. It is essential for slen to be correctly provided, as this 
+ * function is supposed to handle src strings that were network-transmitted and
+ * might not be null-terminated. The copied string will be null terminated, even
+ * if no null terminator was read from src. If dlen is not sufficient to store 
+ * the copied string plus the null terminator, or if the given offset points to 
+ * the end or beyond src, -1 is returned. Returns the number of bytes copied + 1, 
+ * so this value can be used as an offset for successive calls of this function, 
+ * or slen if all chunks have been read. 
  */
 size_t libtwirc_next_chunk(char *dest, size_t dlen, const char *src, size_t slen, size_t off)
 {
@@ -1015,7 +1035,7 @@ size_t libtwirc_next_chunk(char *dest, size_t dlen, const char *src, size_t slen
 	// Calculate the offset to the next chunk (+1 to skip null terminator)
 	size_t new_off = off + cpy_len + 1;
 	
-	// If we've read all data, return slen, otherwise the offset to the next chunk
+	// Return slen if we've read all data, otherwise the offset to the next chunk
 	return new_off >= slen ? slen : new_off;
 }
 	
@@ -1092,6 +1112,9 @@ char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 	return sep_pos + strlen(sep);
 }
 
+/*
+ * TODO: AFAIK, this is untested as of yet! Damn.
+ */
 char *libtwirc_unescape_tag(const char *val)
 {
 	size_t val_len = strlen(val);
@@ -1188,19 +1211,27 @@ void libtwirc_free_params(char **params)
  * Searches prefix for an exclamation mark ('!'). If there is one, everything 
  * before it will be returned as a pointer to an allocated string (malloc), so
  * the caller has to free() it at some point. If there is no exclamation mark 
- * in prefix, NULL will be returned. If prefix is NULL, a segfault will occur.
+ * in prefix or prefix is NULL or we're out of memory, NULL will be returned.
  */
-char *libtwirc_prefix_to_nick(const char *prefix)
+char *libtwirc_parse_nick(const char *prefix)
 {
+	// Nothing to do if nothing has been handed in
+	if (prefix == NULL)
+	{
+		return NULL;
+	}
+	
+	// Search for an exclamation mark in prefix
 	char *sep = strstr(prefix, "!");
 	if (sep == NULL)
 	{
 		return NULL;
 	}
+	
+	// Return the nick as malloc'd string
 	size_t len = sep - prefix;
 	return strndup(prefix, len);
 }
-
 
 /*
  * Extracts tags from the beginning of an IRC message, if any, and returns them
@@ -1212,8 +1243,6 @@ char *libtwirc_prefix_to_nick(const char *prefix)
  * is returned in len. If no tags have been found at the beginning of msg, tags
  * will be NULL, len will be 0 and this function will return a pointer to msg.
  * Otherwise, a pointer to the part of msg after the tags will be returned. 
- *
- * TODO un-escape the tag values before saving them in the tag structs!
  *
  * https://ircv3.net/specs/core/message-tags-3.2.html
  */
@@ -1472,17 +1501,24 @@ int libtwirc_parse_ctcp(struct twirc_event *evt)
  */
 void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 {
-	if (strcmp(evt->command, "001") == 0)
+	// TODO order these by most frequent (statistically), so that we waste as
+	// little CPU cycles as possible on string comparison via strcmp() here!
+	
+	if (strcmp(evt->command, "PRIVMSG") == 0)
 	{
-		libtwirc_on_welcome(state, evt);
-		state->cbs.welcome(state, evt);
+		libtwirc_on_privmsg(state, evt);
+		state->cbs.privmsg(state, evt);
 		return;
 	}
 	if (strcmp(evt->command, "JOIN") == 0)
 	{
-		evt->channel = evt->params[0];
-
 		libtwirc_on_join(state, evt);
+		state->cbs.join(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "PART") == 0)
+	{
+		libtwirc_on_part(state, evt);
 		state->cbs.join(state, evt);
 		return;
 	}
@@ -1492,13 +1528,53 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		state->cbs.ping(state, evt);
 		return;
 	}
-	if (strcmp(evt->command, "PRIVMSG") == 0)
+	if (strcmp(evt->command, "MODE") == 0)
 	{
-		evt->channel = evt->params[0];
-		evt->message = evt->params[evt->trailing];
-
-		libtwirc_on_privmsg(state, evt);
-		state->cbs.privmsg(state, evt);
+		libtwirc_on_mode(state, evt);
+		state->cbs.mode(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "353") == 0 ||
+	    strcmp(evt->command, "366") == 0))
+	{
+		libtwirc_on_names(state, evt);
+		state->cbs.names(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "WHISPER") == 0)
+	{
+		libtwirc_on_whisper(state, evt);
+		state->cbs.whisper(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "NOTICE") == 0)
+	{	
+		libtwirc_on_notice(state, evt);
+		state->cbs.notice(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "ROOMSTATE") == 0)
+	{		
+		libtwirc_on_roomstate(state, evt);
+		state->cbs.roomstate(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "USERSTATE") == 0)
+	{		
+		libtwirc_on_userstate(state, evt);
+		state->cbs.userstate(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "USERNOTICE") == 0)
+	{		
+		libtwirc_on_usernotice(state, evt);
+		state->cbs.usernotice(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "HOSTTARGET") == 0)
+	{
+		libtwirc_on_hosttarget(state, evt);
+		state->cbs.hosttarget(state, evt);		
 		return;
 	}
 	if (strcmp(evt->command, "CLEARCHAT") == 0)
@@ -1507,14 +1583,34 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		state->cbs.clearchat(state, evt);
 		return;
 	}
-	if (strcmp(evt->command, "WHISPER") == 0)
-	{
-		evt->message = evt->params[evt->trailing];	
-
-		libtwirc_on_whisper(state, evt);
-		state->cbs.whisper(state, evt);
+	if (strcmp(evt->command, "CLEARMSG") == 0)
+	{		
+		libtwirc_on_clearmsg(state, evt);
+		state->cbs.clearmsg(state, evt);
 		return;
 	}
+	if (strcmp(evt->command, "001") == 0)
+	{
+		libtwirc_on_welcome(state, evt);
+		state->cbs.welcome(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "GLOBALUSERSTATE") == 0)
+	{
+		libtwirc_on_globaluserstate(state, evt);
+		state->cbs.globaluserstate(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "RECONNECT") == 0)
+	{
+		libtwirc_on_reconnect(state, evt);
+		state->cbs.reconnect(state, evt);
+		return;
+	}
+	
+	// Some unaccounted-for event occured
+	libtwirc_on_other(state, evt);
+	state->cbs.other(state, evt);
 }
 
 /*
@@ -1526,13 +1622,14 @@ void libtwirc_dispatch_ctcp(struct twirc_state *state, struct twirc_event *evt)
 {
 	if (strcmp(evt->ctcp, "ACTION") == 0)
 	{
-		evt->channel = evt->params[0];
-		evt->message = evt->params[1];
-
 		libtwirc_on_action(state, evt);
 		state->cbs.action(state, evt);
 		return;
 	}
+	
+	// Some unaccounted-for event occured
+	libtwirc_on_other(state, evt);
+	state->cbs.other(state, evt);
 }
 
 /*
@@ -1551,28 +1648,22 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 
 	// Extract the tags, if any
 	msg = libtwirc_parse_tags(msg, &(evt.tags), &(evt.num_tags));
-	//fprintf(stderr, ">>> num_tags: %zu\n", num_tags);
 
 	// Extract the prefix, if any
 	msg = libtwirc_parse_prefix(msg, &(evt.prefix));
-	//fprintf(stderr, ">>> prefix: %s\n", prefix);
 
 	// Extract the command, always
 	msg = libtwirc_parse_command(msg, &(evt.command));
-	//fprintf(stderr, ">>> cmd: %s\n", cmd);
 
 	// Extract the parameters, if any
 	msg = libtwirc_parse_params(msg, &(evt.params), &(evt.num_params), &(evt.trailing));
-	//fprintf(stderr, ">>> num_params: %zu\n", num_params);
 
 	// Check for CTCP and possibly modify the event accordingly
 	err = libtwirc_parse_ctcp(&evt);
 
 	// Extract the nick from the prefix, maybe
-	evt.nick = evt.prefix == NULL ? NULL : libtwirc_prefix_to_nick(evt.prefix);
+	evt.nick = libtwirc_parse_nick(evt.prefix);
 	
-	//fprintf(stderr, "(prefix: %s, cmd: %s, tags: %zu, params: %zu, trail: %d)\n", prefix?"y":"n", cmd, num_tags, num_params, trail_idx);
-
 	if (evt.ctcp)
 	{
 		libtwirc_dispatch_ctcp(s, &evt);
@@ -1583,6 +1674,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 	}
 
 	// Free event
+	// TODO: make all of this into a function? libtwirc_free_event()
 	libtwirc_free_tags(evt.tags);
 	free(evt.prefix);
 	free(evt.nick);
@@ -1597,7 +1689,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
  * Process the received data in buf, which has a size of len bytes.
  * Incomplete commands will be buffered in state->buffer, complete commands
  * will be processed right away.
- * TODO
+ * TODO comments: return values etc
  */
 int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len)
 {
@@ -1620,6 +1712,7 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	// received, but will definitely be added in the chunk.
 
 	char *chunk = malloc(len + 1);
+	if (chunk == NULL) { return -1; }
 	chunk[0] = '\0';
 	int off = 0;
 
@@ -1654,48 +1747,57 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 
 	while (libtwirc_shift_token(msg, state->buffer, "\r\n") > 0)
 	{
-		libtwirc_process_msg(state, msg);
+		// Process the message and check if we ran out of memory doing so
+		if (libtwirc_process_msg(state, msg) == -1)
+		{
+			return -1;
+		}
 	}
 	
-	return 0; // TODO
+	return 0;
 }
 
 /*
  * Handles the epoll event epev.
- * Returns 0 on success, -1 if the connection has been interrupted.
+ * Returns 0 on success, -1 if the connection has been interrupted or
+ * not enough memory was available to process the incoming data.
  */
 int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 {
 	// We've got data coming in
 	if(epev->events & EPOLLIN)
 	{
-		//fprintf(stderr, "*socket ready for reading*\n");
-		
 		char buf[TWIRC_BUFFER_SIZE];
 		int bytes_received = 0;
+		
+		// Fetch and process all available data from the socket
 		while ((bytes_received = twirc_recv(s, buf, TWIRC_BUFFER_SIZE)) > 0)
 		{
-			libtwirc_process_data(s, buf, bytes_received);
+			// Process the data and check if we ran out of memory doing so
+			if (libtwirc_process_data(s, buf, bytes_received) == -1)
+			{
+				s->error = TWIRC_ERR_OUT_OF_MEMORY;
+				return -1;
+			}
+		}
+		
+		// If twirc_recv() returned -1, the connection is probably down!
+		if (bytes_received == -1 &&
+            (errno == EBADF ||         // Invalid socket
+			 errno == ECONNREFUSED ||  // Connection refused
+			 errno == ENOTCONN))       // Socket not connected
+		{
+			s->error = TWIRC_ERR_SOCKET_RECV;
+			return -1;
 		}
 	}
 	
 	// We're ready to send data
 	if (epev->events & EPOLLOUT)
 	{
-		//fprintf(stderr, "*socket ready for writing*\n");
-
 		// If we weren't connected yet, we seem to be now!
 		if (s->status & TWIRC_STATUS_CONNECTING)
-		{
-			
-			// Socket really connected?
-			if (tcpsnob_status(s->socket_fd) != 0)
-			{
-				return 0; // or -1?
-			}
-			
-			//fprintf(stderr, "Connection established!\n");
-			
+		{		
 			// Call internal connect event handler
 			// It sets the status to connected and is supposed to
 			// request capabilities and initiate the authentication
@@ -1712,30 +1814,31 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	// Server closed the connection
 	if (epev->events & EPOLLRDHUP)
 	{
-		//fprintf(stderr, "EPOLLRDHUP (peer closed socket connection)\n");
+		s->error = TWIRC_ERR_CONN_CLOSED;
 		libtwirc_on_disconnect(s);
 		s->cbs.disconnect(s, NULL);
 		return -1;
 	}
 	
-	// Server closed the connection 
-	if (epev->events & EPOLLHUP) // will fire, even if not added explicitly
+	// Unexpected hangup on socket 
+	if (epev->events & EPOLLHUP) // fires even if not added explicitly
 	{
-		//fprintf(stderr, "EPOLLHUP (peer closed channel)\n");
+		s->error = TWIRC_ERR_CONN_HANGUP;
 		libtwirc_on_disconnect(s);
 		s->cbs.disconnect(s, NULL);
 		return -1;
 	}
 
-	// Connection error
-	if (epev->events & EPOLLERR) // will fire, even if not added explicitly
+	// Socket error
+	if (epev->events & EPOLLERR) // fires even if not added explicitly
 	{
-		//fprintf(stderr, "EPOLLERR (socket error)\n");
+		s->error = TWIRC_ERR_CONN_SOCKET;
 		libtwirc_on_disconnect(s);
 		s->cbs.disconnect(s, NULL);
 		return -1;
 	}
 	
+	// Handled everything and no disconnect detected
 	return 0;
 }
 
@@ -1753,7 +1856,7 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	// An error has occured
 	if (num_events == -1)
 	{
-		fprintf(stderr, "epoll_wait encountered an error\n");
+		s->error = TWIRC_ERR_EPOLL_WAIT;
 		s->running = 0;
 		return -1;
 	}

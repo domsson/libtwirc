@@ -32,7 +32,7 @@ int read_token(char *buf, size_t len)
 	return 1;
 }
 
-void handle_ping(struct twirc_state *s, const struct twirc_event *evt)
+void handle_ping(struct twirc_state *s, struct twirc_event *evt)
 {
 	fprintf(stdout, "*** received PING: %s\n", evt->params[0]);
 }
@@ -40,7 +40,7 @@ void handle_ping(struct twirc_state *s, const struct twirc_event *evt)
 /*
  *
  */
-void handle_connect(struct twirc_state *s, const struct twirc_event *evt)
+void handle_connect(struct twirc_state *s, struct twirc_event *evt)
 {
 	fprintf(stdout, "*** connected!\n");
 }
@@ -48,7 +48,7 @@ void handle_connect(struct twirc_state *s, const struct twirc_event *evt)
 /*
  *
  */
-void handle_welcome(struct twirc_state *s, const struct twirc_event *evt)
+void handle_welcome(struct twirc_state *s, struct twirc_event *evt)
 {
 	// Let's join a lot of channels to test this bad boy!
 	twirc_cmd_join(s, "#domsson");
@@ -69,7 +69,7 @@ void handle_welcome(struct twirc_state *s, const struct twirc_event *evt)
 /*
  *
  */
-void handle_join(struct twirc_state *s, const struct twirc_event *evt)
+void handle_join(struct twirc_state *s, struct twirc_event *evt)
 {
 	fprintf(stdout, "*** %s joined %s\n", evt->nick, evt->params[0]);
 
@@ -81,7 +81,7 @@ void handle_join(struct twirc_state *s, const struct twirc_event *evt)
 	}
 }
 
-void handle_privmsg(struct twirc_state *s, const struct twirc_event *evt)
+void handle_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -91,7 +91,7 @@ void handle_privmsg(struct twirc_state *s, const struct twirc_event *evt)
 			evt->channel, evt->nick, evt->message);
 }
 
-void handle_action(struct twirc_state *s, const struct twirc_event *evt)
+void handle_action(struct twirc_state *s, struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -101,7 +101,7 @@ void handle_action(struct twirc_state *s, const struct twirc_event *evt)
 			evt->channel, evt->nick, evt->message);
 }
 
-void handle_whisper(struct twirc_state *s, const struct twirc_event *evt)
+void handle_whisper(struct twirc_state *s, struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -111,7 +111,7 @@ void handle_whisper(struct twirc_state *s, const struct twirc_event *evt)
 			evt->nick, evt->message);
 }
 
-void handle_disconnect(struct twirc_state *s, const struct twirc_event *evt)
+void handle_disconnect(struct twirc_state *s, struct twirc_event *evt)
 {
 	fprintf(stdout, "*** connection lost\n");
 }
