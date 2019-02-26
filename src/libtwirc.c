@@ -17,7 +17,7 @@
  * Returns 0 if the connection process has started and is now in progress, 
  * -1 if the connection attempt failed (check the state's error and errno).
  */
-int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *pass, const char *nick)
+int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *nick, const char *pass)
 {
 	// Create socket
 	s->socket_fd = tcpsnob_create(s->ip_type);
