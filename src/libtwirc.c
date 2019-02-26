@@ -807,13 +807,13 @@ void libtwirc_on_disconnect(struct twirc_state *s)
  * Returns 0 if both commands were send successfully, -1 on error.
  * TODO: See if we can't send both commands in one - what's better?
  */
-int twirc_auth(struct twirc_state *state)
+int twirc_auth(struct twirc_state *s)
 {
-	if (twirc_cmd_pass(state, state->login.pass) == -1)
+	if (twirc_cmd_pass(s, s->login.pass) == -1)
 	{
 		return -1;
 	}
-	if (twirc_cmd_nick(state, state->login.nick) == -1)
+	if (twirc_cmd_nick(s, s->login.nick) == -1)
 	{
 		return -1;
 	}
@@ -826,13 +826,13 @@ int twirc_auth(struct twirc_state *state)
  * Sends the QUIT command to the server, then terminates the connection.
  * Returns 0 on success, -1 on error (see errno).
  */ 
-int twirc_disconnect(struct twirc_state *state)
+int twirc_disconnect(struct twirc_state *s)
 {
 	// Say bye-bye to the IRC server
-	twirc_cmd_quit(state);
+	twirc_cmd_quit(s);
 	
 	// Close the socket
-	int err = tcpsnob_close(state->socket_fd);
+	int err = tcpsnob_close(s->socket_fd);
 	
 	// Run the disconnect event handlers
 	libtwirc_on_disconnect(s);
@@ -1547,7 +1547,7 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		return;
 	}
 	if (strcmp(evt->command, "353") == 0 ||
-	    strcmp(evt->command, "366") == 0))
+	    strcmp(evt->command, "366") == 0)
 	{
 		libtwirc_on_names(state, evt);
 		state->cbs.names(state, evt);
