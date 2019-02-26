@@ -1601,6 +1601,13 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		state->cbs.clearmsg(state, evt);
 		return;
 	}
+	if (strcmp(evt->command, "CAP") == 0 &&
+	    strcmp(evt->params[0], "*") == 0)
+	{
+		libtwirc_on_capack(state, evt);
+		state->cbs.capack(state, evt);
+		return;
+	}
 	if (strcmp(evt->command, "001") == 0)
 	{
 		libtwirc_on_welcome(state, evt);
@@ -1617,6 +1624,7 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 	{
 		libtwirc_on_invalidcmd(state, evt);
 		state->cbs.invalidcmd(state, evt);
+		return;
 	}
 	if (strcmp(evt->command, "RECONNECT") == 0)
 	{
