@@ -212,6 +212,7 @@ struct twirc_state
 	struct twirc_callbacks cbs;        // event callbacks
 	int epfd;                          // epoll file descriptor
 	int error;                         // last error that occured
+	void *context;                     // pointer to user data
 };
 
 struct twirc_state *twirc_init();
@@ -223,6 +224,9 @@ int twirc_send(struct twirc_state *s, const char *msg);
 int twirc_recv(struct twirc_state *s, char *buf, size_t len);
 int twirc_auth(struct twirc_state *s);
 int twirc_kill(struct twirc_state *s);
+
+void  twirc_set_context(struct twirc_state *s, void *ctx);
+void *twirc_get_context(struct twirc_state *s);
 
 int twirc_loop(struct twirc_state *s, int timeout);
 int twirc_tick(struct twirc_state *s, int timeout);

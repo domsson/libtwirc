@@ -138,6 +138,16 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 	return res_len;
 }
 
+void twirc_set_context(struct twirc_state *s, void *ctx)
+{
+	s->context = ctx;
+}
+
+void *twirc_get_context(struct twirc_state *s)
+{
+	return s->context;
+}
+
 /*
  * Returns 1 if state is connected to Twitch IRC, otherwise 0.
  */
