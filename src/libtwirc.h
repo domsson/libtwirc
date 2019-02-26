@@ -196,7 +196,7 @@ struct twirc_callbacks
 	twirc_callback hosttarget;         // Channel starts or stops host mode
 	twirc_callback reconnect;          // Server is going for a restart soon
 	twirc_callback disconnect;         // Connection interrupted
-	twirc_callback unknowncmd;         // Server doesn't recognise command
+	twirc_callback invalidcmd;         // Server doesn't recognise command
 	twirc_callback other;              // Everything else (for now)
 };
 

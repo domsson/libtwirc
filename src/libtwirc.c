@@ -345,6 +345,18 @@ void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
 }
 
 /*
+ * Invalid IRC Commands
+ * If you send an invalid command, you will get a 421 message back:
+ *
+ * < WHO #<channel>
+ * > :tmi.twitch.tv 421 <user> WHO :Unknown command
+ */
+void libtwirc_on_invalidcmd(struct twirc_state *s, struct twirc_event *evt)
+{
+	// Don't think we have to do anything here, honestly
+}
+
+/*
  * Handler for the "001" command (RPL_WELCOME), which the Twitch servers send
  * on successful login, even when no capabilities have been requested.
  */
@@ -861,7 +873,7 @@ void twirc_init_callbacks(struct twirc_callbacks *cbs)
 	cbs->hosttarget      = libtwirc_on_null;
 	cbs->reconnect       = libtwirc_on_null;
 	cbs->disconnect      = libtwirc_on_null;
-	cbs->unknowncmd      = libtwirc_on_null;
+	cbs->invalidcmd      = libtwirc_on_null;
 	cbs->other           = libtwirc_on_null;
 }
 
@@ -1600,6 +1612,11 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		libtwirc_on_globaluserstate(state, evt);
 		state->cbs.globaluserstate(state, evt);
 		return;
+	}
+	if (strcmp(evt->command, "421") == 0)
+	{
+		libtwirc_on_invalidcmd(state, evt);
+		state->cbs.invalidcmd(state, evt);
 	}
 	if (strcmp(evt->command, "RECONNECT") == 0)
 	{
