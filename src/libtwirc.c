@@ -138,11 +138,26 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 	return res_len;
 }
 
+/*
+ * Returns the code of the last error that has occurred. For some errors, 
+ * you should also check errno for additional details. Check the documentation.
+ */
+int twirc_get_error(struct twirc_state *s)
+{
+	return s->error;
+}
+
+/*
+ * Set the 'context' to a user provided pointer.
+ */
 void twirc_set_context(struct twirc_state *s, void *ctx)
 {
 	s->context = ctx;
 }
 
+/*
+ * Returns the user provided 'context' pointer.
+ */
 void *twirc_get_context(struct twirc_state *s)
 {
 	return s->context;
