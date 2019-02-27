@@ -166,17 +166,17 @@ void *twirc_get_context(struct twirc_state *s)
 /*
  * Returns 1 if state is connected to Twitch IRC, otherwise 0.
  */
-int twirc_is_connected(const struct twirc_state *state)
+int twirc_is_connected(const struct twirc_state *s)
 {
-	return state->status & TWIRC_STATUS_CONNECTED ? 1 : 0;
+	return s->status & TWIRC_STATUS_CONNECTED ? 1 : 0;
 }
 
 /*
  * Returns 1 if state is authenticated (logged in), otherwise 0.
  */
-int twirc_is_logged_in(const struct twirc_state *state)
+int twirc_is_logged_in(const struct twirc_state *s)
 {
-	return state->status & TWIRC_STATUS_AUTHENTICATED ? 1 : 0;
+	return s->status & TWIRC_STATUS_AUTHENTICATED ? 1 : 0;
 }
 
 /*
@@ -184,11 +184,11 @@ int twirc_is_logged_in(const struct twirc_state *state)
  * This is the first part of the authentication process (next part is NICK).
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_pass(struct twirc_state *state, const char *pass)
+int twirc_cmd_pass(struct twirc_state *s, const char *pass)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "PASS %s", pass);
-	return twirc_send(state, msg);
+	return twirc_send(s, msg);
 }
 
 /*
@@ -196,116 +196,116 @@ int twirc_cmd_pass(struct twirc_state *state, const char *pass)
  * This is the second part of the authentication process (first is PASS).
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_nick(struct twirc_state *state, const char *nick)
+int twirc_cmd_nick(struct twirc_state *s, const char *nick)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "NICK %s", nick);
-	return twirc_send(state, msg);
+	return twirc_send(s, msg);
 }
 
 /*
  * Request to join the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_join(struct twirc_state *state, const char *chan)
+int twirc_cmd_join(struct twirc_state *s, const char *chan)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "JOIN %s", chan);
-	return twirc_send(state, msg);
+	return twirc_send(s, msg);
 }
 
 /*
  * Leave (part) the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_part(struct twirc_state *state, const char *chan)
+int twirc_cmd_part(struct twirc_state *s, const char *chan)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "PART %s", chan);
-	return twirc_send(state, msg);
+	return twirc_send(s, msg);
 }
 
 /*
  * Send a message (privmsg) to the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *msg)
+int twirc_cmd_privmsg(struct twirc_state *s, const char *chan, const char *msg)
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :%s", chan, msg);
-	return twirc_send(state, privmsg);
+	return twirc_send(s, privmsg);
 }
 
 /*
  * Send a CTCP ACTION message (aka "/me") to the specified channel.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_action(struct twirc_state *state, const char *chan, const char *msg)
+int twirc_cmd_action(struct twirc_state *s, const char *chan, const char *msg)
 {
 	// "PRIVMSG #<chan> :\x01ACTION <msg>\x01"
 	char action[TWIRC_MESSAGE_SIZE];
 	action[0] = '\0';
 	snprintf(action, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :%cACTION %s%c",
 			chan, '\x01', msg, '\x01');
-	return twirc_send(state, action);
+	return twirc_send(s, action);
 }
 
 /*
  * Send a whisper message to the specified user.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *msg)
+int twirc_cmd_whisper(struct twirc_state *s, const char *nick, const char *msg)
 {
 	// "PRIVMSG #jtv :/w <user> <msg>"
 	char whisper[TWIRC_MESSAGE_SIZE];
 	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :/w %s %s", 
 			TWIRC_WHISPER_CHANNEL, nick, msg);
-	return twirc_send(state, whisper);
+	return twirc_send(s, whisper);
 }
 
 /*
  * Requests the tags capability from the Twitch server.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_req_tags(struct twirc_state *state)
+int twirc_cmd_req_tags(struct twirc_state *s)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/tags");
+	return twirc_send(s, "CAP REQ :twitch.tv/tags");
 }
 
 /*
  * Requests the membership capability from the Twitch server.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_req_membership(struct twirc_state *state)
+int twirc_cmd_req_membership(struct twirc_state *s)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/membership");
+	return twirc_send(s, "CAP REQ :twitch.tv/membership");
 }
 
 /*
  * Requests the commands capability from the Twitch server.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_req_commands(struct twirc_state *state)
+int twirc_cmd_req_commands(struct twirc_state *s)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/commands");
+	return twirc_send(s, "CAP REQ :twitch.tv/commands");
 }
 
 /*
  * Requests the chatrooms capability from the Twitch server.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_req_chatrooms(struct twirc_state *state)
+int twirc_cmd_req_chatrooms(struct twirc_state *s)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/tags twitch.tv/commands");
+	return twirc_send(s, "CAP REQ :twitch.tv/tags twitch.tv/commands");
 }
 
 /*
  * Requests the tags, membership, commands and chatrooms capabilities.
  * Returns 0 if the command was sent successfully, -1 on error.
  */
-int twirc_cmd_req_all(struct twirc_state *state)
+int twirc_cmd_req_all(struct twirc_state *s)
 {
-	return twirc_send(state, 
+	return twirc_send(s, 
 	    "CAP REQ: twitch.tv/tags twitch.tv/commands twitch.tv/membership");
 }
 
@@ -316,7 +316,7 @@ int twirc_cmd_req_all(struct twirc_state *state)
  * unless it is prefixed with one already.
  * Returns 0 on success, -1 otherwise.
  */
-int twirc_cmd_pong(struct twirc_state *state, const char *param)
+int twirc_cmd_pong(struct twirc_state *s, const char *param)
 {
 	// "PONG :tmi.twitch.tv"
 	char pong[TWIRC_PONG_SIZE];
@@ -324,16 +324,16 @@ int twirc_cmd_pong(struct twirc_state *state, const char *param)
 	snprintf(pong, TWIRC_PONG_SIZE, "PONG %s%s", 
 			param && param[0] == ':' ? "" : ":",
 			param ? param : "");
-	return twirc_send(state, pong);
+	return twirc_send(s, pong);
 }
 
 /*
  * Sends the QUIT command to the IRC server.
  * Returns 0 on success, -1 otherwise. 
  */
-int twirc_cmd_quit(struct twirc_state *state)
+int twirc_cmd_quit(struct twirc_state *s)
 {
-	return twirc_send(state, "QUIT");
+	return twirc_send(s, "QUIT");
 }
 
 /*
@@ -952,59 +952,59 @@ struct twirc_state* twirc_init()
 	return state;
 }
 
-void libtwirc_free_callbacks(struct twirc_state *state)
+void libtwirc_free_callbacks(struct twirc_state *s)
 {
 	// We do not need to free the callback pointers, as they are function 
 	// pointers and were therefore not allocated with malloc() or similar.
 	// However, let's make sure we 'forget' the currently assigned funcs.
-	memset(&state->cbs, 0, sizeof(struct twirc_callbacks));
+	memset(&s->cbs, 0, sizeof(struct twirc_callbacks));
 }
 
-void libtwirc_free_login(struct twirc_state *state)
+void libtwirc_free_login(struct twirc_state *s)
 {
-	free(state->login.host);
-	free(state->login.port);
-	free(state->login.nick);
-	free(state->login.pass);
-	state->login.host = NULL;
-	state->login.port = NULL;
-	state->login.nick = NULL;
-	state->login.pass = NULL;
+	free(s->login.host);
+	free(s->login.port);
+	free(s->login.nick);
+	free(s->login.pass);
+	s->login.host = NULL;
+	s->login.port = NULL;
+	s->login.nick = NULL;
+	s->login.pass = NULL;
 }
 
-void libtwirc_free_user(struct twirc_state *state)
+void libtwirc_free_user(struct twirc_state *s)
 {
-	free(state->user.name);
-	free(state->user.id);
-	state->user.name = NULL;
-	state->user.id   = NULL;
+	free(s->user.name);
+	free(s->user.id);
+	s->user.name = NULL;
+	s->user.id   = NULL;
 }
 
 /*
  * Frees the twirc_state and all of its members.
  */
-int twirc_free(struct twirc_state *state)
+int twirc_free(struct twirc_state *s)
 {
-	libtwirc_free_callbacks(state);
-	libtwirc_free_login(state);
-	libtwirc_free_user(state);
-	free(state->buffer);
-	free(state);
-	state = NULL;
+	libtwirc_free_callbacks(s);
+	libtwirc_free_login(s);
+	libtwirc_free_user(s);
+	free(s->buffer);
+	free(s);
+	s = NULL;
 	return 0;
 }
 
 /*
  * Schwarzeneggers the connection with the server and frees the twirc_state.
  */
-int twirc_kill(struct twirc_state *state)
+int twirc_kill(struct twirc_state *s)
 {
-	if (state->status & TWIRC_STATUS_CONNECTED)
+	if (s->status & TWIRC_STATUS_CONNECTED)
 	{
-		twirc_disconnect(state);
+		twirc_disconnect(s);
 	}
-	close(state->epfd);
-	twirc_free(state);
+	close(s->epfd);
+	twirc_free(s);
 	return 0; 
 }
 
