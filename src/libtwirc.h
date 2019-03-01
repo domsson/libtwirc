@@ -141,7 +141,41 @@ struct twirc_tag
 /*
 struct twirc_tags
 {
-
+	char *badges;
+	int ban_duration;
+	int bits;
+	char *broadcaster_lang;
+	char *color;
+	char *display_name;
+	char *emotes;
+	int emote_only;
+	char *emote-sets;
+	int followers_only;
+	char *id;
+	char *login;
+	int mod;
+	char *msg_id;
+	// int msg_param_cumulative_months; -> msg_param_months
+	char *msg_param_display_name;
+	char *msg_param_login;
+	int msg_param_months;
+	char *msg_param_recipient_display_name;
+	char *msg_param_recipient_id;
+	char *msg_param_recipient_user_name;
+	int msg_param_should_share_streak;
+	int msg_param_streak_months;
+	char *msg-param-sub-plan;
+	char *msg-param-sub-plan-name;
+	int msg_param_viewer_count;
+	char *msg_param_ritual_name;
+	int r9k;
+	char *room_id;
+	int slow;
+	int subs_only;
+	char *system_msg;
+	char *target_msg_id;
+	char *tmi_sent_ts;
+	char *user_id;
 };
 */
 

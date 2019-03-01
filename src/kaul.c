@@ -80,18 +80,67 @@ void handle_join(struct twirc_state *s, struct twirc_event *evt)
 			twirc_cmd_action(s, "#domsson", "is the coolest bot of all times");
 	}
 }
+/*
+void set_color(char *col)
+{
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+	if (strcmp(col, "") == 0)
+	{
+		printf("\033");
+		return;
+	}
+}
+
+void reset_colod()
+{
+	printf("\033[0m");
+}
+*/
 
 void handle_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
-	
+	/*
 	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", 
 			tm.tm_hour, tm.tm_min, tm.tm_sec, 
 			evt->channel, evt->nick, evt->message);
-	fprintf(stdout, " '--> id = %s, display-name: %s\n",
-			twirc_tag_by_key(evt->tags, "id"),
-			twirc_tag_by_key(evt->tags, "display-name"));
+	*/
+	//fprintf(stderr, "%s\n", twirc_tag_by_key(evt->tags, "display-name"));
 }
 
 void handle_action(struct twirc_state *s, struct twirc_event *evt)
