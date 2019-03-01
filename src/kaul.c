@@ -135,12 +135,12 @@ void handle_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
-	/*
+	
 	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", 
 			tm.tm_hour, tm.tm_min, tm.tm_sec, 
 			evt->channel, evt->nick, evt->message);
-	*/
-	//fprintf(stderr, "%s\n", twirc_tag_by_key(evt->tags, "display-name"));
+	
+	fprintf(stderr, "%s\n", twirc_tag_by_key(evt->tags, "display-name"));
 }
 
 void handle_action(struct twirc_state *s, struct twirc_event *evt)

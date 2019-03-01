@@ -960,9 +960,9 @@ char *libtwirc_unescape_tag(const char *val)
 {
 	size_t val_len = strlen(val);
 	char *escaped = malloc((val_len + 1) * sizeof(char));
-	
+
 	int e = 0;
-	for (int i = 0; i < (int) val_len - 1; ++i)
+	for (int i = 0; i < (int) val_len; ++i)
 	{
 		if (val[i] == '\\')
 		{
@@ -999,7 +999,7 @@ char *libtwirc_unescape_tag(const char *val)
 		}
 		escaped[e++] = val[i];
 	}
-	escaped[e++] = '\0';
+	escaped[e] = '\0';
 	return escaped;
 }
 
@@ -1123,16 +1123,19 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 
 		char *eq = strstr(tag, "=");
 
-		// TODO there is a bug in here! when eq is NOT null (meaning there is
-		// an equals sign in there, BUT it's a key-only tag, meaning there is
-		// a null terminator just after the '=', then we actually end up with
-		// the '=' attached to the key name in the tag! we need to strip it!
-
-		// It's a key-only tag, for example "tagname" or "tagname="
-		// So either we didn't find an '=' or the next char is '\0'
-		if (eq == NULL || eq[1] == '\0')
+	
+		// It's a key-only tag without a trailing '=' (never seen on Twitch)
+		// Hence, we didn't find a '=' at all (example: "tagname")
+		if (eq == NULL)
 		{
-			(*tags)[i] = libtwirc_create_tag(tag, eq == NULL ? "" : eq+1);
+			(*tags)[i] = libtwirc_create_tag(tag, "");
+		}
+		// It's a key-only tag with a trailing '=' (always the case on Twitch)
+		// Hence, we found a '=', but the next char is '\0' (example: "tagname=")
+		else if (eq[1] == '\0')
+		{
+			eq[0] = '\0';
+			(*tags)[i] = libtwirc_create_tag(tag, "");
 		}
 		// It's a tag with key-value pair
 		else
@@ -1140,7 +1143,7 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 			eq[0] = '\0';
 			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
 		}
-		fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
+		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
 	}
 
 	// Set the number of tags found
@@ -1495,7 +1498,7 @@ void libtwirc_dispatch_ctcp(struct twirc_state *state, struct twirc_event *evt)
  */
 int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 {
-	fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
+	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
 	int err = 0;
 	struct twirc_event evt = { 0 };
