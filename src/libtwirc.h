@@ -218,7 +218,7 @@ struct twirc_state
 struct twirc_state *twirc_init();
 struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s);
 
-int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *pass, const char *nick);
+int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *nick, const char *pass);
 int twirc_disconnect(struct twirc_state *s);
 int twirc_send(struct twirc_state *s, const char *msg);
 int twirc_recv(struct twirc_state *s, char *buf, size_t len);
@@ -227,6 +227,8 @@ int twirc_kill(struct twirc_state *s);
 
 void  twirc_set_context(struct twirc_state *s, void *ctx);
 void *twirc_get_context(struct twirc_state *s);
+
+char *twirc_tag_by_key(struct twirc_tag **tags, const char *key);
 
 int twirc_loop(struct twirc_state *s, int timeout);
 int twirc_tick(struct twirc_state *s, int timeout);

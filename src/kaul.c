@@ -89,6 +89,9 @@ void handle_privmsg(struct twirc_state *s, struct twirc_event *evt)
 	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", 
 			tm.tm_hour, tm.tm_min, tm.tm_sec, 
 			evt->channel, evt->nick, evt->message);
+	fprintf(stdout, " '--> id = %s, display-name: %s\n",
+			twirc_tag_by_key(evt->tags, "id"),
+			twirc_tag_by_key(evt->tags, "display-name"));
 }
 
 void handle_action(struct twirc_state *s, struct twirc_event *evt)
