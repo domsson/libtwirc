@@ -1123,26 +1123,27 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 
 		char *eq = strstr(tag, "=");
 
-	
-		// It's a key-only tag without a trailing '=' (never seen on Twitch)
-		// Hence, we didn't find a '=' at all (example: "tagname")
+		// It's a key-only tag, like "foo" (never seen that Twitch)
+		// Hence, we didn't find a '=' at all 
 		if (eq == NULL)
 		{
+			// TODO we need to be able to pass NULL here and have
+			//      libtwirc_create_tag() set the tag value to NULL
+			//      accordingly, because it's stupid to get "" back
+			//      when retrieving the value with twirc_tag_by_key()
 			(*tags)[i] = libtwirc_create_tag(tag, "");
 		}
-		// It's a key-only tag with a trailing '=' (always the case on Twitch)
-		// Hence, we found a '=', but the next char is '\0' (example: "tagname=")
-		else if (eq[1] == '\0')
-		{
-			eq[0] = '\0';
-			(*tags)[i] = libtwirc_create_tag(tag, "");
-		}
-		// It's a tag with key-value pair
+		// It's either a key-only tag with a trailing '=' ("foo=")
+		// or a tag with key-value pair, like "foo=bar"
 		else
 		{
-			eq[0] = '\0';
+			// Turn the '=' into '\0' to separate key and value
+			eq[0] = '\0'; // Turn the '=' into '\0'
+
+			// tag = stuff before eq (key); eq+1 = empty or value
 			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
 		}
+
 		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
 	}
 
