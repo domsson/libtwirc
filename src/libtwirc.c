@@ -1635,16 +1635,16 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 			}
 		}
 		
-		// If twirc_recv() returned -1, the connection is probably down!
-		if (bytes_received == -1 &&
-			(errno == EBADF ||         // Invalid socket
-			 errno == ECONNREFUSED ||  // Connection refused
-			 errno == ENOTCONN))       // Socket not connected
+		// If twirc_recv() returned -1, the connection is probably down,
+		// either way, we  have a serious issue and should stop running!
+		if (bytes_received == -1)
 		{
 			s->error = TWIRC_ERR_SOCKET_RECV;
-			// If we were connected, call the disconnect handlers
-			if (twirc_is_connected(s))
+			
+			// We were connected but now seem to be disconnected?
+			if (twirc_is_connected(s) && tcpsnob_status(s->socket_fd) == -1)
 			{
+				// If so, call the disconnect event handlers
 				libtwirc_on_disconnect(s);
 				s->cbs.disconnect(s, NULL);
 			}
@@ -1658,15 +1658,9 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 		// If we weren't connected yet, we seem to be now!
 		if (s->status & TWIRC_STATUS_CONNECTING)
 		{		
-			// Call internal connect event handler
-			// It sets the status to connected and is supposed to
-			// request capabilities and initiate the authentication
+			// The internal connect event handler will initiate the
+			// request of capabilities as well as the login process
 			libtwirc_on_connect(s);
-
-			// Call user's connect event handler
-			// Although I don't see what the user would want to do 
-			// on connect; the welcome event, which is dispatched 
-			// once authentication has happened, is way more useful
 			s->cbs.connect(s, NULL);
 		}
 	}
@@ -1742,16 +1736,12 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		// Set the error accordingly
 		s->error = TWIRC_ERR_EPOLL_WAIT;
 		
-		// Were we connected previously?
-		if (twirc_is_connected(s))
+		// Were we connected previously but now seem to be disconnected?
+		if (twirc_is_connected(s) && tcpsnob_status(s->socket_fd) == -1)
 		{
-			// Are we now (probably) disconnected?
-			if (tcpsnob_status(s->socket_fd) == -1)
-			{
-				// ...if so, call the disconnect event handlers
-				libtwirc_on_disconnect(s);
-				s->cbs.disconnect(s, NULL);
-			}
+			// ...if so, call the disconnect event handlers
+			libtwirc_on_disconnect(s);
+			s->cbs.disconnect(s, NULL);
 		}
 		return -1;
 	}
