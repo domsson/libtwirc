@@ -12,8 +12,8 @@
 #endif
 
 // Convenience
-#define TWIRC_IPV4 AF_INET
-#define TWIRC_IPV6 AF_INET6
+#define TWIRC_IPV4 TCPSNOB_IPV4
+#define TWIRC_IPV6 TCPSNOB_IPV6
 
 // State (bitfield)
 #define TWIRC_STATUS_DISCONNECTED    0

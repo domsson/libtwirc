@@ -1,13 +1,9 @@
 #include <stdio.h>      // NULL, fprintf(), perror()
 #include <stdlib.h>     // NULL, EXIT_FAILURE, EXIT_SUCCESS
 #include <errno.h>      // errno
-#include <netdb.h>      // getaddrinfo()
 #include <unistd.h>     // close(), fcntl()
 #include <string.h>     // strlen(), strerror()
-#include <fcntl.h>      // fcntl()
-#include <ctype.h>      // isspace()
-#include <sys/types.h>  // ssize_t
-#include <sys/socket.h> // socket(), connect(), send(), recv()
+//#include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include "tcpsnob/tcpsnob.h"
 #include "libtwirc.h"
