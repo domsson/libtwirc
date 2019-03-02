@@ -3,8 +3,12 @@
 #include <string.h>     //
 #include <errno.h>      // errno
 #include <sys/types.h>  // ssize_t
+#include <signal.h>
 #include <time.h>
 #include "libtwirc.h"
+
+static volatile int running; // Used to stop main loop in case of SIGINT etc
+static volatile int handled; // The last signal that has been handled
 
 /*
  * Read a file called 'token' (in the same directory as the code is run)
@@ -122,6 +126,13 @@ void handle_disconnect(struct twirc_state *s, struct twirc_event *evt)
 	fprintf(stdout, "*** connection lost\n");
 }
 
+void sigint_handler(int sig)
+{
+	fprintf(stderr, "*** received signal, exiting\n");
+	running = 0;
+	handled = sig;
+}
+
 /*
  * main
  */
@@ -130,6 +141,26 @@ int main(void)
 	// HELLO WORLD
 	fprintf(stderr, "Starting up %s version %o.%o build %f\n",
 		TWIRC_NAME, TWIRC_VER_MAJOR, TWIRC_VER_MINOR, TWIRC_VER_BUILD);
+
+	
+	// Make sure we still do clean-up on SIGINT (ctrl+c)
+	// and similar signals that indicate we should quit.
+	struct sigaction sa_int = {
+		.sa_handler = &sigint_handler
+	};
+	if (sigaction(SIGINT, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGINT handler\n");
+	}
+	if (sigaction(SIGQUIT, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGQUIT handler\n");
+	}
+	if (sigaction (SIGTERM, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGTERM handler\n");
+	}
+
 
 	// CREATE TWIRC INSTANCE
 	struct twirc_state *s = twirc_init();
@@ -171,7 +202,11 @@ int main(void)
 	fprintf(stderr, "Connection initiated...\n");
 
 	// MAIN LOOP
-	twirc_loop(s, 1000);
+	//twirc_loop(s, 1000);
+	running = 1;
+	while (twirc_tick(s, 1000) == 0 && running == 1)
+	{
+	}
 
 	twirc_kill(s);
 	fprintf(stderr, "Bye!\n");

@@ -1705,8 +1705,13 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 /*
  * Waits timeout milliseconds for events to happen on the IRC connection.
  * Returns 0 if all events have been handled and -1 if an error has been 
- * encountered or the connection has been lost (check the twirc_state's
- * connection status to see if the latter is the case). 
+ * encountered and/or the connection has been lost. To determine whether the 
+ * connection has been lost, use twirc_is_connected(). If the connection is 
+ * still up, for example, if we were interrupted by a SIGSTOP signal, then it
+ * is up to the user to decide whether they want to disconnect now or keep the
+ * connection alive. Remember, however, that messages will keep piling up in 
+ * the kernel; if your program is handling very busy channels, you might not 
+ * want to stay connected without handling those messages for too long. 
  */
 int twirc_tick(struct twirc_state *s, int timeout)
 {
@@ -1720,36 +1725,33 @@ int twirc_tick(struct twirc_state *s, int timeout)
 		// errno; the possibilities include wrong/faulty parameters and,
 		// more interesting, that a signal has interrupted epoll_wait().
 		// Wrong parameters will either happen on the very first call or
-		// not at all, but a signal could come in anytime. That said, we
-		// should tidy up (send a quit/disconnect command, then call the
-		// disconnect callbacks) accordingly; because I assume a signal 
-		// that would interrupt us will most likely mean that the whole
-		// program is going down anyway -- I'm not certain on this one 
-		// though, so we should investigate this further. TODO
+		// not at all, but a signal could come in anytime. Either way, 
+		// epoll_wait() failing doesn't necessarily mean that we lost 
+		// the connection with the server. Some signals, like SIGSTOP 
+		// can mean that we're simply supposed to stop execution until 
+		// a SIGCONT is received. Hence, it seems like a good idea to 
+		// leave it up to the user what to do, which means that we are
+		// not going to quit/disconnect from IRC; we're simply going to
+		// return -1 to indicate an issue. The user can then check the 
+		// connection status and decide if they want to explicitly end 
+		// the connection or keep it alive. One exception: if we can 
+		// actually determine, right here, that the connection seems to
+		// be down, then we'll set off the disconnect event handlers.
+		// For this, we'll use tcpsnob_status().
 
+		// Set the error accordingly
 		s->error = TWIRC_ERR_EPOLL_WAIT;
 		
-		// We're not exactly sure what happened, but let's disconnect
+		// Were we connected previously?
 		if (twirc_is_connected(s))
 		{
-			// In case we're still connected, let's wave bye-bye
-			twirc_cmd_quit(s);
-			
-			// Call the disconnect handlers now, as we are not even
-			// going to enter libtwirc_handle_event() anymore
-			// NOTE: If the user is running their own loop and they
-			// decide to call upon twirc_tick() again after it gave
-			// them -1, then there is a slim chance that epoll_wait
-			// magically works again the next time (let's say the 
-			// signal that interrupted us here has been handled in 
-			// some graceful way) and therefore, we do enter into 
-			// libtwirc_handle_event() again, which will then raise
-			// the disconnect handlers AGAIN because the IRC server
-			// closed the socket now that we've send a QUIT to it.
-			// TODO decide if this is okay or if we need some more 
-			//      sophisticated way of dealing with this
-			libtwirc_on_disconnect(s);
-			s->cbs.disconnect(s, NULL);
+			// Are we now (probably) disconnected?
+			if (tcpsnob_status(s->socket_fd) == -1)
+			{
+				// ...if so, call the disconnect event handlers
+				libtwirc_on_disconnect(s);
+				s->cbs.disconnect(s, NULL);
+			}
 		}
 		return -1;
 	}
@@ -1765,15 +1767,11 @@ int twirc_tick(struct twirc_state *s, int timeout)
 
 /*
  * Runs an endless loop that waits for events timeout milliseconds at a time.
- * Once the connection has been closed or the state's running field has been 
- * set to 0, the loop is ended and this function returns with a value of 0.
- * TODO: the code doesn't actually respect the above comment: we run as long
- *       as 'running' is set to 1, we don't even check the return value of 
- *       twirc_tick() - however, isn't it too much to check for both anyway?
- *       Can't we just do: `while(twirc_tick() == 0)` instead and drop the 
- *       running flag altogether? Or the other way round, make sure that if 
- *       the connection is dropped OR an error occurs, the running flag is 
- *       always set to 0 for sure (maybe that's already the case, probably)
+ * Once the connection has been closed or some error has occured that caused 
+ * twirc_tick() to return -1, the loop is ended. Returns 0 if the connection 
+ * to the IRC server has been lost or 1 if the connection is still up and the
+ * loop has ended for some other reason (check the state's error field and 
+ * possibly errno for additional details).
  */
 int twirc_loop(struct twirc_state *state, int timeout)
 {
@@ -1781,17 +1779,9 @@ int twirc_loop(struct twirc_state *state, int timeout)
 	// so that we stop running after the connection attempt has been going 
 	// on for so-and-so long. Or shall we leave that up to the user code?
 
-	/*
-	state->running = 1;
-	while (state->running)
-	{
-		// timeout is in milliseconds
-		twirc_tick(state, timeout);
-	}
-	*/
 	while(twirc_tick(state, timeout) == 0)
 	{
 		// Nothing to do here, actually. :-)
 	}
-	return 0;
+	return twirc_is_connected(state);
 }
