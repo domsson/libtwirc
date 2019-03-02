@@ -954,6 +954,10 @@ char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 }
 
 /*
+ * Takes an escaped string (as described in the IRCv3 spec, section tags)
+ * and returns a pointer to a malloc'd string that holds the unescaped string.
+ * Remember that the returned pointer has to be free'd by the caller!
+ *
  * TODO: This is untested as of yet! We need to run some escaped
  *       strings through here and check if they come out as expected.
  */
@@ -1136,9 +1140,9 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 		{
 			// Turn the '=' into '\0' to separate key and value
 			eq[0] = '\0'; // Turn the '=' into '\0'
-
-			// tag = stuff before eq (key); eq+1 = empty or value
-			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
+			// Set val to NULL for key-only tags (to avoid "")
+			char *val = eq[1] == '\0' ? NULL : eq+1;
+			(*tags)[i] = libtwirc_create_tag(tag, val);
 		}
 
 		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
