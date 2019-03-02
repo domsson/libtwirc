@@ -63,7 +63,7 @@ int twirc_connect(struct twirc_state *s, const char *host, const char *port, con
 		return -1;
 	}
 
-	// We are connected!
+	// We are in the process of connecting!
 	s->status = TWIRC_STATUS_CONNECTING;
 	return 0;
 }
@@ -598,18 +598,6 @@ void libtwirc_on_connect(struct twirc_state *s)
 	// Set status to connected (discarding all other flags)
 	s->status = TWIRC_STATUS_CONNECTED;
 
-	// Start authentication process
-	if (s->status & TWIRC_STATUS_AUTHENTICATING)
-	{
-		// Authentication has already been initialized!
-		return;
-	}
-	if (s->status & TWIRC_STATUS_AUTHENTICATED)
-	{
-		// Already authenticated!
-		return;
-	}
-
 	// Request capabilities before login, so that we will receive the
 	// GLOBALUSERSTATE command on login in addition to the 001 (WELCOME)
 	twirc_capreq(s);
@@ -622,8 +610,13 @@ void libtwirc_on_disconnect(struct twirc_state *s)
 {
 	// Set status to disconnected (discarding all other flags)
 	s->status = TWIRC_STATUS_DISCONNECTED;
-	// Set running to 0 so that our main loop stops
-	s->running = 0;
+	
+	// Close the socket (this might fail as it might be closed already);
+	// we're not checking for that error and therefore we don't report 
+	// the error via s->error for two reasons: first, we kind of expect 
+	// this to fail; second: we don't want to override more meaningful 
+	// errors that might have occurred before 
+	tcpsnob_close(s->socket_fd);
 }
 
 /*
@@ -652,27 +645,29 @@ int twirc_auth(struct twirc_state *s)
 }
 
 /*
- * Sends the QUIT command to the server, then terminates the connection.
- * Returns 0 on success, -1 on error (see errno).
+ * Sends the QUIT command to the server, then terminates the connection and 
+ * calls both the internal as well as external disconnect event handlers.
+ * Returns 0 on success, -1 if the socket could not be closed (see errno).
  */ 
 int twirc_disconnect(struct twirc_state *s)
 {
 	// Say bye-bye to the IRC server
 	twirc_cmd_quit(s);
 	
-	// Close the socket
-	int err = tcpsnob_close(s->socket_fd);
-	
-	// Run the disconnect event handlers
-	libtwirc_on_disconnect(s);
-	s->cbs.disconnect(s, NULL);
-	
-	// Account for close() running into an error
-	if (err == -1)
-	{
-		s->error = TWIRC_ERR_SOCKET_CLOSE;
-	}
-	return err;
+	// Close the socket and return if that worked
+	return tcpsnob_close(s->socket_fd);
+
+	// Note that we are NOT calling the disconnect event handlers from
+	// here; this is on purpose! We only want to call these from within
+	// libtwirc_handle_event() and, in one case, twirc_tick(), to avoid
+	// situations where they might be raised twice. Remember: closing 
+	// the socket here might lead to an epoll event that 'naturally' 
+	// leads to us calling the disconnect handlers anyway. If that does
+	// not happen, well, then so be it. If the user called upon this
+	// function, they should expect the connection to be down shortly
+	// after. Of course, this would leave us in an inconsistent state,
+	// as s->state would report that we're still connected, but oh well.
+	// TODO test/investigate further if this could be an issue or not.
 }
 
 /*
@@ -756,59 +751,59 @@ struct twirc_state* twirc_init()
 	return state;
 }
 
-void libtwirc_free_callbacks(struct twirc_state *state)
+void libtwirc_free_callbacks(struct twirc_state *s)
 {
 	// We do not need to free the callback pointers, as they are function 
 	// pointers and were therefore not allocated with malloc() or similar.
 	// However, let's make sure we 'forget' the currently assigned funcs.
-	memset(&state->cbs, 0, sizeof(struct twirc_callbacks));
+	memset(&s->cbs, 0, sizeof(struct twirc_callbacks));
 }
 
-void libtwirc_free_login(struct twirc_state *state)
+void libtwirc_free_login(struct twirc_state *s)
 {
-	free(state->login.host);
-	free(state->login.port);
-	free(state->login.nick);
-	free(state->login.pass);
-	state->login.host = NULL;
-	state->login.port = NULL;
-	state->login.nick = NULL;
-	state->login.pass = NULL;
+	free(s->login.host);
+	free(s->login.port);
+	free(s->login.nick);
+	free(s->login.pass);
+	s->login.host = NULL;
+	s->login.port = NULL;
+	s->login.nick = NULL;
+	s->login.pass = NULL;
 }
 
-void libtwirc_free_user(struct twirc_state *state)
+void libtwirc_free_user(struct twirc_state *s)
 {
-	free(state->user.name);
-	free(state->user.id);
-	state->user.name = NULL;
-	state->user.id   = NULL;
+	free(s->user.name);
+	free(s->user.id);
+	s->user.name = NULL;
+	s->user.id   = NULL;
 }
 
 /*
  * Frees the twirc_state and all of its members.
  */
-int twirc_free(struct twirc_state *state)
+int twirc_free(struct twirc_state *s)
 {
-	libtwirc_free_callbacks(state);
-	libtwirc_free_login(state);
-	libtwirc_free_user(state);
-	free(state->buffer);
-	free(state);
-	state = NULL;
+	libtwirc_free_callbacks(s);
+	libtwirc_free_login(s);
+	libtwirc_free_user(s);
+	free(s->buffer);
+	free(s);
+	s = NULL;
 	return 0;
 }
 
 /*
  * Schwarzeneggers the connection with the server and frees the twirc_state.
  */
-int twirc_kill(struct twirc_state *state)
+int twirc_kill(struct twirc_state *s)
 {
-	if (state->status & TWIRC_STATUS_CONNECTED)
+	if (twirc_is_connected(s))
 	{
-		twirc_disconnect(state);
+		twirc_disconnect(s);
 	}
-	close(state->epfd);
-	twirc_free(state);
+	close(s->epfd);
+	twirc_free(s);
 	return 0; 
 }
 
@@ -1642,12 +1637,17 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 		
 		// If twirc_recv() returned -1, the connection is probably down!
 		if (bytes_received == -1 &&
-            (errno == EBADF ||         // Invalid socket
+			(errno == EBADF ||         // Invalid socket
 			 errno == ECONNREFUSED ||  // Connection refused
 			 errno == ENOTCONN))       // Socket not connected
 		{
-			// TODO don't we need to call disconnect event handlers here?
 			s->error = TWIRC_ERR_SOCKET_RECV;
+			// If we were connected, call the disconnect handlers
+			if (twirc_is_connected(s))
+			{
+				libtwirc_on_disconnect(s);
+				s->cbs.disconnect(s, NULL);
+			}
 			return -1;
 		}
 	}
@@ -1698,7 +1698,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 		return -1;
 	}
 	
-	// Handled everything and no disconnect detected
+	// Handled everything and no disconnect/error occurred
 	return 0;
 }
 
@@ -1716,13 +1716,41 @@ int twirc_tick(struct twirc_state *s, int timeout)
 	// An error has occured
 	if (num_events == -1)
 	{
-		// TODO shouldn't we check if we're already connected and, if so,
-		//      call the disconnect event handlers here? Or maybe not, as
-		//      an error in epoll_wait doesn't necessarily mean that we 
-		//      actually lost our connection - but how should we handle
-		//      this (hopefully rather exotic) situation properly?
+		// The exact reason why epoll_wait failed can be queried through
+		// errno; the possibilities include wrong/faulty parameters and,
+		// more interesting, that a signal has interrupted epoll_wait().
+		// Wrong parameters will either happen on the very first call or
+		// not at all, but a signal could come in anytime. That said, we
+		// should tidy up (send a quit/disconnect command, then call the
+		// disconnect callbacks) accordingly; because I assume a signal 
+		// that would interrupt us will most likely mean that the whole
+		// program is going down anyway -- I'm not certain on this one 
+		// though, so we should investigate this further. TODO
+
 		s->error = TWIRC_ERR_EPOLL_WAIT;
-		s->running = 0;
+		
+		// We're not exactly sure what happened, but let's disconnect
+		if (twirc_is_connected(s))
+		{
+			// In case we're still connected, let's wave bye-bye
+			twirc_cmd_quit(s);
+			
+			// Call the disconnect handlers now, as we are not even
+			// going to enter libtwirc_handle_event() anymore
+			// NOTE: If the user is running their own loop and they
+			// decide to call upon twirc_tick() again after it gave
+			// them -1, then there is a slim chance that epoll_wait
+			// magically works again the next time (let's say the 
+			// signal that interrupted us here has been handled in 
+			// some graceful way) and therefore, we do enter into 
+			// libtwirc_handle_event() again, which will then raise
+			// the disconnect handlers AGAIN because the IRC server
+			// closed the socket now that we've send a QUIT to it.
+			// TODO decide if this is okay or if we need some more 
+			//      sophisticated way of dealing with this
+			libtwirc_on_disconnect(s);
+			s->cbs.disconnect(s, NULL);
+		}
 		return -1;
 	}
 	
@@ -1753,11 +1781,17 @@ int twirc_loop(struct twirc_state *state, int timeout)
 	// so that we stop running after the connection attempt has been going 
 	// on for so-and-so long. Or shall we leave that up to the user code?
 
+	/*
 	state->running = 1;
 	while (state->running)
 	{
 		// timeout is in milliseconds
 		twirc_tick(state, timeout);
+	}
+	*/
+	while(twirc_tick(state, timeout) == 0)
+	{
+		// Nothing to do here, actually. :-)
 	}
 	return 0;
 }

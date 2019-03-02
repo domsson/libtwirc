@@ -237,7 +237,6 @@ struct twirc_callbacks
 struct twirc_state
 {
 	int status : 8;                    // connection status
-	int running : 1;                   // are we running in a loop?
 	int ip_type;                       // ip type, ipv4 or ipv6
 	int socket_fd;                     // tcp socket file descriptor
 	char *buffer;                      // irc message buffer
@@ -280,6 +279,8 @@ int twirc_cmd_req_commands(struct twirc_state *s);
 int twirc_cmd_pong(struct twirc_state *s, const char *param);
 int twirc_cmd_quit(struct twirc_state *s);
 
+int twirc_is_connecting(const struct twirc_state *s);
+int twirc_is_logging_in(const struct twirc_state *s);
 int twirc_is_connected(const struct twirc_state *s);
 int twirc_is_logged_in(const struct twirc_state *s);
 #endif

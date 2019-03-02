@@ -7,7 +7,10 @@
 #include "libtwirc.h"
 
 /*
- *
+ * Read a file called 'token' (in the same directory as the code is run)
+ * and read it into the buffer pointed to by buf. The file is exptected to
+ * contain one line, and one line only: the Twitch oauth token, which should
+ * begin with "oauth:". This is used as your IRC password on Twitch IRC.
  */
 int read_token(char *buf, size_t len)
 {
@@ -50,6 +53,8 @@ void handle_connect(struct twirc_state *s, struct twirc_event *evt)
  */
 void handle_welcome(struct twirc_state *s, struct twirc_event *evt)
 {
+	fprintf(stdout, "*** logged in!\n");
+
 	// Let's join a lot of channels to test this bad boy!
 	twirc_cmd_join(s, "#domsson");
 
@@ -71,7 +76,7 @@ void handle_welcome(struct twirc_state *s, struct twirc_event *evt)
  */
 void handle_join(struct twirc_state *s, struct twirc_event *evt)
 {
-	fprintf(stdout, "*** %s joined %s\n", evt->nick, evt->params[0]);
+	//fprintf(stdout, "*** %s joined %s\n", evt->nick, evt->channel);
 
 	if (evt->nick && strcmp(evt->nick, "kaulmate") == 0
 	    && strcmp(evt->params[0], "#domsson") == 0)
@@ -163,10 +168,7 @@ int main(void)
 		return EXIT_FAILURE;
 	}
 
-	if (errno = EINPROGRESS)
-	{
-		fprintf(stderr, "Connection initiated...\n");
-	}
+	fprintf(stderr, "Connection initiated...\n");
 
 	// MAIN LOOP
 	twirc_loop(s, 1000);
