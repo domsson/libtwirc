@@ -285,6 +285,7 @@ int twirc_cmd_whisper(twirc_state_t *s, const char *nick, const char *msg);
 int twirc_cmd_req_tags(twirc_state_t *s);
 int twirc_cmd_req_membership(twirc_state_t *s);
 int twirc_cmd_req_commands(twirc_state_t *s);
+int twirc_cmd_ping(twirc_state_t *s, const char *param);
 int twirc_cmd_pong(twirc_state_t *s, const char *param);
 int twirc_cmd_quit(twirc_state_t *s);
 

@@ -163,6 +163,20 @@ int twirc_cmd_pong(struct twirc_state *state, const char *param)
 }
 
 /*
+ * Sends the PING command to the IRC server. 
+ * If param is given, it will be appended.
+ * Returns 0 on success, -1 otherwise.
+ */
+int twirc_cmd_ping(struct twirc_state *state, const char *param)
+{
+	// "PING <param>"
+	char ping[TWIRC_PONG_SIZE];
+	ping[0] = '\0';
+	snprintf(ping, TWIRC_PONG_SIZE, "PING %s", param ? param : "");
+	return twirc_send(state, ping);
+}
+
+/*
  * Sends the QUIT command to the IRC server.
  * Returns 0 on success, -1 otherwise. 
  */
