@@ -113,9 +113,6 @@ int twirc_send(struct twirc_state *state, const char *msg)
  */
 int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 {
-	// Make sure there is no garbage in the buffer
-	memset(buf, 0, len);
-	
 	// Receive data
 	ssize_t res_len;
 	res_len = tcpsnob_receive(state->socket_fd, buf, len - 1);
@@ -132,7 +129,7 @@ int twirc_recv(struct twirc_state *state, char *buf, size_t len)
 		return -1;
 	}
 	
-	// Make super-sure that the data received is null terminated
+	// Make sure that the received data is null terminated
 	buf[res_len] = '\0';
 
 	// Return the number of bytes received
