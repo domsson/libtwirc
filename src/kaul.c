@@ -81,35 +81,15 @@ void handle_join(struct twirc_state *s, struct twirc_event *evt)
 	}
 }
 
-void set_color(char *col)
-{
-	if (strcmp(col, "#FF0000") == 0)
-	{
-		printf("\033[0;31m");
-		return;
-	}
-	if (strcmp(col, "#0000FF") == 0)
-	{
-		printf("\033[0;34m");
-		return;
-	}
-}
-
-void reset_color()
-{
-	printf("\033[0m");
-}
-
 void handle_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
-	set_color(twirc_tag_by_key(evt->tags, "color"));
-	fprintf(stdout, "[%02d:%02d:%02d] (%s) %s: %s\n", 
+	char *color = twirc_tag_by_key(evt->tags, "color");
+	fprintf(stdout, "[%02d:%02d:%02d] [%s] (%s) %s: %s\n", 
 			tm.tm_hour, tm.tm_min, tm.tm_sec, 
+			color ? color : "#XXXXXX", 
 			evt->channel, evt->nick, evt->message);
-	reset_color();
-	//fprintf(stderr, "%s\n", twirc_tag_by_key(evt->tags, "color"));
 }
 
 void handle_action(struct twirc_state *s, struct twirc_event *evt)

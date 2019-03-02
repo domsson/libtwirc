@@ -954,60 +954,61 @@ char *libtwirc_next_token(char *dest, const char *src, const char *sep)
 }
 
 /*
- * TODO: AFAIK, this is untested as of yet! Damn.
+ * TODO: This is untested as of yet! We need to run some escaped
+ *       strings through here and check if they come out as expected.
  */
-char *libtwirc_unescape_tag(const char *val)
+char *libtwirc_unescape(const char *str)
 {
-	size_t val_len = strlen(val);
-	char *escaped = malloc((val_len + 1) * sizeof(char));
+	size_t str_len = strlen(str);
+	char *unescaped = malloc((str_len + 1) * sizeof(char));
 
-	int e = 0;
-	for (int i = 0; i < (int) val_len; ++i)
+	int u = 0;
+	for (int i = 0; i < (int) str_len; ++i)
 	{
-		if (val[i] == '\\')
+		if (str[i] == '\\')
 		{
-			if (val[i+1] == ':') // "\:" -> ";"
+			if (str[i+1] == ':') // "\:" -> ";"
 			{
-				escaped[e++] = ';';
+				unescaped[u++] = ';';
 				++i;
 				continue;
 			}
-			if (val[i+1] == 's') // "\s" -> " ";
+			if (str[i+1] == 's') // "\s" -> " ";
 			{
-				escaped[e++] = ' ';
+				unescaped[u++] = ' ';
 				++i;
 				continue;
 			}
-			if (val[i+1] == '\\') // "\\" -> "\";
+			if (str[i+1] == '\\') // "\\" -> "\";
 			{
-				escaped[e++] = '\\';
+				unescaped[u++] = '\\';
 				++i;
 				continue;
 			}
-			if (val[i+1] == 'r') // "\r" -> '\r' (CR)
+			if (str[i+1] == 'r') // "\r" -> '\r' (CR)
 			{
-				escaped[e++] = '\r';
+				unescaped[u++] = '\r';
 				++i;
 				continue;
 			}
-			if (val[i+1] == 'n') // "\n" -> '\n' (LF)
+			if (str[i+1] == 'n') // "\n" -> '\n' (LF)
 			{
-				escaped[e++] = '\n';
+				unescaped[u++] = '\n';
 				++i;
 				continue;
 			}
 		}
-		escaped[e++] = val[i];
+		unescaped[u++] = str[i];
 	}
-	escaped[e] = '\0';
-	return escaped;
+	unescaped[u] = '\0';
+	return unescaped;
 }
 
 struct twirc_tag *libtwirc_create_tag(const char *key, const char *val)
 {
 	struct twirc_tag *tag = malloc(sizeof(struct twirc_tag));
 	tag->key   = strdup(key);
-	tag->value = libtwirc_unescape_tag(val);
+	tag->value = val == NULL ? NULL : libtwirc_unescape(val);
 	return tag;
 }
 
@@ -1127,11 +1128,7 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 		// Hence, we didn't find a '=' at all 
 		if (eq == NULL)
 		{
-			// TODO we need to be able to pass NULL here and have
-			//      libtwirc_create_tag() set the tag value to NULL
-			//      accordingly, because it's stupid to get "" back
-			//      when retrieving the value with twirc_tag_by_key()
-			(*tags)[i] = libtwirc_create_tag(tag, "");
+			(*tags)[i] = libtwirc_create_tag(tag, NULL);
 		}
 		// It's either a key-only tag with a trailing '=' ("foo=")
 		// or a tag with key-value pair, like "foo=bar"
