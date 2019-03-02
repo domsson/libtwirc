@@ -257,6 +257,7 @@ int twirc_send(struct twirc_state *s, const char *msg);
 int twirc_recv(struct twirc_state *s, char *buf, size_t len);
 int twirc_auth(struct twirc_state *s);
 int twirc_kill(struct twirc_state *s);
+int twirc_capreq(struct twirc_state *s);
 
 void  twirc_set_context(struct twirc_state *s, void *ctx);
 void *twirc_get_context(struct twirc_state *s);
