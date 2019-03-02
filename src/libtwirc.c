@@ -174,7 +174,7 @@ int twirc_auth(struct twirc_state *s)
 	{
 		return -1;
 	}
-	
+
 	s->status |= TWIRC_STATUS_AUTHENTICATING;
 	return 0;
 }
@@ -388,7 +388,7 @@ size_t libtwirc_next_chunk(char *dest, size_t dlen, const char *src, size_t slen
 	
 	// Copy everything from offset to (and including) the next null terminator
 	// but at most max_len bytes (important if there is no null terminator)
-	strncpy(dest, src + off, max_len); // TODO can simplify by using stpncpy()
+	strncpy(dest, src + off, max_len); 
 	
 	// Check how much we've actually written to the dest buffer
 	size_t cpy_len = strnlen(dest, max_len);
@@ -450,38 +450,6 @@ size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
 	src[new_len] = '\0';
 
 	return tok_len;
-}
-
-/*
- * Finds the first occurrence of sep within src, then copies everything before
- * the sep into dest. Returns a pointer to the string after the separator or 
- * NULL if the separator was not found in src.
- * TODO: doesn't this return a pointer past src once no sep is found anymore?
- *       also, if we return NULL when there is no separator, we can never get
- *       to the last token, can we? This is okay for shift_token, as the idea
- *       behind it is to work on a string made up of multiple IRC messages,
- *       where even the last one ends in '\r\n', but now that we've made this
- *       into a rather general-purpose function that takes the seperator as 
- *       an input parameter, this behavior is rather counter-intuitive, no?
- */
-char *libtwirc_next_token(char *dest, const char *src, const char *sep)
-{
-	// Find the first occurence of the separator
-	char *sep_pos = strstr(src, sep);
-	if (sep_pos == NULL)
-	{
-		return NULL;
-	}
-
-	// Figure out the length of the token
-	size_t tok_len = sep_pos - src;
-
-	// Copy the token to the dest buffer
-	strncpy(dest, src, tok_len);
-	dest[tok_len] = '\0';
-
-	// Return a pointer to the remaining string
-	return sep_pos + strlen(sep);
 }
 
 /*
