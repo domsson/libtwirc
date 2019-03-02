@@ -89,12 +89,12 @@ int twirc_send(struct twirc_state *state, const char *msg)
 	buf[msg_len+1] = '\n';
 	buf[msg_len+2] = '\0';
 
-	if (strstr(buf, "PASS") == NULL)
-	{
-		fprintf(stderr, "< %s", buf);
-	}
-
+	// Actually send the message
 	int ret = tcpsnob_send(state->socket_fd, buf, buf_len);
+	
+	// Dispatch the outgoing event
+	libtwirc_process_msg(state, msg, 1);
+
 	free(buf);
 
 	return ret;
@@ -227,6 +227,7 @@ void twirc_init_callbacks(struct twirc_callbacks *cbs)
 	cbs->disconnect      = libtwirc_on_null;
 	cbs->invalidcmd      = libtwirc_on_null;
 	cbs->other           = libtwirc_on_null;
+	cbs->outgoing        = libtwirc_on_null;
 }
 
 /*
@@ -832,6 +833,12 @@ int libtwirc_parse_ctcp(struct twirc_event *evt)
 	return 0;
 }
 
+void libtwirc_dispatch_out(struct twirc_state *state, struct twirc_event *evt)
+{
+	libtwirc_on_outgoing(state, evt);
+	state->cbs.outgoing(state, evt);
+}
+
 /*
  * Dispatches the internal and external event handler / callback functions
  * for the given event, based on the command field of evt. Does not handle
@@ -990,7 +997,7 @@ void libtwirc_dispatch_ctcp(struct twirc_state *state, struct twirc_event *evt)
  * Returns 0 on success, -1 if an out of memory error occured during the
  * parsing/handling of a CTCP event.
  */
-int libtwirc_process_msg(struct twirc_state *s, const char *msg)
+int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outgoing)
 {
 	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
@@ -1017,7 +1024,11 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 	// Extract the nick from the prefix, maybe
 	evt.nick = libtwirc_parse_nick(evt.prefix);
 	
-	if (evt.ctcp)
+	if (outgoing)
+	{
+		libtwirc_dispatch_out(s, &evt);
+	}
+	else if (evt.ctcp)
 	{
 		libtwirc_dispatch_ctcp(s, &evt);
 	}
@@ -1101,7 +1112,7 @@ int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len
 	while (libtwirc_shift_token(msg, state->buffer, "\r\n") > 0)
 	{
 		// Process the message and check if we ran out of memory doing so
-		if (libtwirc_process_msg(state, msg) == -1)
+		if (libtwirc_process_msg(state, msg, 0) == -1)
 		{
 			return -1;
 		}

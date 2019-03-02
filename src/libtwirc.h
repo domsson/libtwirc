@@ -233,6 +233,7 @@ struct twirc_callbacks
 	twirc_callback disconnect;         // Connection interrupted
 	twirc_callback invalidcmd;         // Server doesn't recognise command
 	twirc_callback other;              // Everything else (for now)
+	twirc_callback outgoing;           // Messages we send TO the server
 };
 
 typedef struct twirc_callbacks twirc_callbacks_t;
@@ -255,6 +256,8 @@ typedef struct twirc_state     twirc_state_t;
 
 struct twirc_state *twirc_init();
 struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
+
+int libtwirc_process_msg(twirc_state_t *s, const char *msg, int outgoing);
 
 int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass);
 int twirc_disconnect(twirc_state_t *s);

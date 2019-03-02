@@ -17,6 +17,11 @@ void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
 	// Nothing in here. That's on purpose.
 }
 
+void libtwirc_on_outgoing(struct twirc_state *s, struct twirc_event *evt)
+{
+	// Let's see..
+}
+
 /*
  * Invalid IRC Commands
  * If you send an invalid command, you will get a 421 message back:
