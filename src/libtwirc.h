@@ -117,6 +117,8 @@ struct twirc_login
 	char *pass;
 };
 
+typedef struct twirc_login twirc_login_t;
+
 struct twirc_user
 {
 	char *name;     // display-name
@@ -124,11 +126,15 @@ struct twirc_user
 	char color[8];  // color in chat
 };
 
+typedef struct twirc_user twirc_user_t;
+
 struct twirc_tag
 {
 	char *key;
 	char *value;
 };
+
+typedef struct twirc_tag twirc_tag_t;
 
 // https://pastebin.com/qzzvpuB6
 // TODO come up with a solution of how to hand the relevant meta data 
@@ -187,23 +193,17 @@ struct twirc_event
 	char **params;                     // IRC message parameter
 	size_t num_params;                 // Number of elements in params
 	int trailing;                      // Index of the trailing param
-	struct twirc_tag **tags;           // IRC message tags
+	twirc_tag_t **tags;                // IRC message tags
 	size_t num_tags;                   // Number of elements in tags
 	
 	// For convenience
 	char *nick;                        // Nick as extracted from prefix
 	char *channel;                     // Channel as extracted from params
 	char *message;                     // Message as extracted from params
-	char *ctcp;	                       // CTCP commmand, if any
+	char *ctcp;                        // CTCP commmand, if any
 };
 
-// TODO: Not (yet) in use -- maybe we don't need it either?
-struct twirc_caps
-{
-	int tags : 1;
-	int membership: 1;
-	int commands: 1;
-};
+typedef struct twirc_event twirc_event_t;
 
 typedef void (*twirc_callback)(struct twirc_state *s, struct twirc_event *e);
 
@@ -234,54 +234,59 @@ struct twirc_callbacks
 	twirc_callback other;              // Everything else (for now)
 };
 
+typedef struct twirc_callbacks twirc_callbacks_t;
+
 struct twirc_state
 {
 	int status : 8;                    // connection status
 	int ip_type;                       // ip type, ipv4 or ipv6
 	int socket_fd;                     // tcp socket file descriptor
 	char *buffer;                      // irc message buffer
-	struct twirc_login login;          // irc login data 
-	struct twirc_user user;            // twitch user details
-	struct twirc_callbacks cbs;        // event callbacks
+	twirc_login_t login;               // irc login data 
+	twirc_user_t user;                 // twitch user details
+	twirc_callbacks_t cbs;             // event callbacks
 	int epfd;                          // epoll file descriptor
 	int error;                         // last error that occured
 	void *context;                     // pointer to user data
 };
 
+typedef struct twirc_state     twirc_state_t;
+
 struct twirc_state *twirc_init();
-struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s);
+struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
 
-int twirc_connect(struct twirc_state *s, const char *host, const char *port, const char *nick, const char *pass);
-int twirc_disconnect(struct twirc_state *s);
-int twirc_send(struct twirc_state *s, const char *msg);
-int twirc_recv(struct twirc_state *s, char *buf, size_t len);
-int twirc_auth(struct twirc_state *s);
-int twirc_kill(struct twirc_state *s);
-int twirc_capreq(struct twirc_state *s);
+int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass);
+int twirc_disconnect(twirc_state_t *s);
+int twirc_send(twirc_state_t *s, const char *msg);
+int twirc_recv(twirc_state_t *s, char *buf, size_t len);
+int twirc_auth(twirc_state_t *s);
+int twirc_kill(twirc_state_t *s);
+int twirc_capreq(twirc_state_t *s);
 
-void  twirc_set_context(struct twirc_state *s, void *ctx);
-void *twirc_get_context(struct twirc_state *s);
+void  twirc_set_context(twirc_state_t *s, void *ctx);
+void *twirc_get_context(twirc_state_t *s);
 
-char *twirc_tag_by_key(struct twirc_tag **tags, const char *key);
+char *twirc_tag_by_key(twirc_tag_t **tags, const char *key);
 
-int twirc_loop(struct twirc_state *s, int timeout);
-int twirc_tick(struct twirc_state *s, int timeout);
+int twirc_loop(twirc_state_t *s, int timeout);
+int twirc_tick(twirc_state_t *s, int timeout);
 
-int twirc_cmd_pass(struct twirc_state *s, const char *pass);
-int twirc_cmd_nick(struct twirc_state *s, const char *nick);
-int twirc_cmd_join(struct twirc_state *s, const char *chan);
-int twirc_cmd_part(struct twirc_state *s, const char *chan);
-int twirc_cmd_privmsg(struct twirc_state *s, const char *chan, const char *msg);
-int twirc_cmd_action(struct twirc_state *s, const char *chan, const char *msg);
-int twirc_cmd_whisper(struct twirc_state *s, const char *nick, const char *msg);
-int twirc_cmd_req_tags(struct twirc_state *s);
-int twirc_cmd_req_membership(struct twirc_state *s);
-int twirc_cmd_req_commands(struct twirc_state *s);
-int twirc_cmd_pong(struct twirc_state *s, const char *param);
-int twirc_cmd_quit(struct twirc_state *s);
+int twirc_cmd_pass(twirc_state_t *s, const char *pass);
+int twirc_cmd_nick(twirc_state_t *s, const char *nick);
+int twirc_cmd_join(twirc_state_t *s, const char *chan);
+int twirc_cmd_part(twirc_state_t *s, const char *chan);
+int twirc_cmd_privmsg(twirc_state_t *s, const char *chan, const char *msg);
+int twirc_cmd_action(twirc_state_t *s, const char *chan, const char *msg);
+int twirc_cmd_whisper(twirc_state_t *s, const char *nick, const char *msg);
+int twirc_cmd_req_tags(twirc_state_t *s);
+int twirc_cmd_req_membership(twirc_state_t *s);
+int twirc_cmd_req_commands(twirc_state_t *s);
+int twirc_cmd_pong(twirc_state_t *s, const char *param);
+int twirc_cmd_quit(twirc_state_t *s);
 
-int twirc_is_connecting(const struct twirc_state *s);
-int twirc_is_logging_in(const struct twirc_state *s);
-int twirc_is_connected(const struct twirc_state *s);
-int twirc_is_logged_in(const struct twirc_state *s);
+int twirc_is_connecting(const twirc_state_t *s);
+int twirc_is_logging_in(const twirc_state_t *s);
+int twirc_is_connected(const twirc_state_t *s);
+int twirc_is_logged_in(const twirc_state_t *s);
+
 #endif
