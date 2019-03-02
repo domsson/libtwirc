@@ -187,6 +187,7 @@ struct twirc_tags
 
 struct twirc_event
 {
+	char *raw;                         // The raw message as received
 	// 'Raw' data
 	char *prefix;                      // IRC message prefix
 	char *command;                     // IRC message command

@@ -1,9 +1,8 @@
 #include <stdio.h>      // NULL, fprintf(), perror()
 #include <stdlib.h>     // NULL, EXIT_FAILURE, EXIT_SUCCESS
 #include <errno.h>      // errno
-#include <unistd.h>     // close(), fcntl()
+#include <unistd.h>     // close()
 #include <string.h>     // strlen(), strerror()
-//#include <sys/socket.h> // socket(), connect(), send(), recv()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include "tcpsnob/tcpsnob.h"
 #include "libtwirc.h"
@@ -152,13 +151,11 @@ int twirc_capreq(struct twirc_state *s)
 
 /*
  * Authenticates with the Twitch Server using the NICK and PASS commands.
- * You are not automatically authenticated when this function returns,
- * you need to wait for the server's reply first. If the tags capability 
- * has been requested and acknoweldged before, the server will confirm 
- * login (authentication) with the GLOBALUSERSTATE command, otherwise we
- * can just look out for the MOTD (starting with numeric command 001).
+ * Login is not automatically completed upon return of this function, one has 
+ * to wait for the server to reply. If the tags capability has been requested 
+ * beforehand, the server will confirm login with the GLOBALUSERSTATE command,
+ * otherwise just look out for the MOTD (starting with numeric command 001).
  * Returns 0 if both commands were send successfully, -1 on error.
- * TODO: See if we can't send both commands in one - what's better?
  */
 int twirc_auth(struct twirc_state *s)
 {
@@ -857,35 +854,16 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		state->cbs.join(state, evt);
 		return;
 	}
-	if (strcmp(evt->command, "PART") == 0)
+	if (strcmp(evt->command, "CLEARCHAT") == 0)
 	{
-		libtwirc_on_part(state, evt);
-		state->cbs.join(state, evt);
+		libtwirc_on_clearchat(state, evt);
+		state->cbs.clearchat(state, evt);
 		return;
 	}
-	if (strcmp(evt->command, "PING") == 0)
-	{
-		libtwirc_on_ping(state, evt);
-		state->cbs.ping(state, evt);
-		return;
-	}
-	if (strcmp(evt->command, "MODE") == 0)
-	{
-		libtwirc_on_mode(state, evt);
-		state->cbs.mode(state, evt);
-		return;
-	}
-	if (strcmp(evt->command, "353") == 0 ||
-	    strcmp(evt->command, "366") == 0)
-	{
-		libtwirc_on_names(state, evt);
-		state->cbs.names(state, evt);
-		return;
-	}
-	if (strcmp(evt->command, "WHISPER") == 0)
-	{
-		libtwirc_on_whisper(state, evt);
-		state->cbs.whisper(state, evt);
+	if (strcmp(evt->command, "CLEARMSG") == 0)
+	{		
+		libtwirc_on_clearmsg(state, evt);
+		state->cbs.clearmsg(state, evt);
 		return;
 	}
 	if (strcmp(evt->command, "NOTICE") == 0)
@@ -912,22 +890,41 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		state->cbs.usernotice(state, evt);
 		return;
 	}
+	if (strcmp(evt->command, "WHISPER") == 0)
+	{
+		libtwirc_on_whisper(state, evt);
+		state->cbs.whisper(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "PART") == 0)
+	{
+		libtwirc_on_part(state, evt);
+		state->cbs.join(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "PING") == 0)
+	{
+		libtwirc_on_ping(state, evt);
+		state->cbs.ping(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "MODE") == 0)
+	{
+		libtwirc_on_mode(state, evt);
+		state->cbs.mode(state, evt);
+		return;
+	}
+	if (strcmp(evt->command, "353") == 0 ||
+	    strcmp(evt->command, "366") == 0)
+	{
+		libtwirc_on_names(state, evt);
+		state->cbs.names(state, evt);
+		return;
+	}
 	if (strcmp(evt->command, "HOSTTARGET") == 0)
 	{
 		libtwirc_on_hosttarget(state, evt);
 		state->cbs.hosttarget(state, evt);		
-		return;
-	}
-	if (strcmp(evt->command, "CLEARCHAT") == 0)
-	{
-		libtwirc_on_clearchat(state, evt);
-		state->cbs.clearchat(state, evt);
-		return;
-	}
-	if (strcmp(evt->command, "CLEARMSG") == 0)
-	{		
-		libtwirc_on_clearmsg(state, evt);
-		state->cbs.clearmsg(state, evt);
 		return;
 	}
 	if (strcmp(evt->command, "CAP") == 0 &&
@@ -1000,6 +997,8 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 	int err = 0;
 	struct twirc_event evt = { 0 };
 
+	evt.raw = strdup(msg);
+
 	// Extract the tags, if any
 	msg = libtwirc_parse_tags(msg, &(evt.tags), &(evt.num_tags));
 
@@ -1030,6 +1029,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 	// Free event
 	// TODO: make all of this into a function? libtwirc_free_event()
 	libtwirc_free_tags(evt.tags);
+	free(evt.raw);
 	free(evt.prefix);
 	free(evt.nick);
 	free(evt.command);
@@ -1040,10 +1040,9 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg)
 }
 
 /*
- * Process the received data in buf, which has a size of len bytes.
- * Incomplete commands will be buffered in state->buffer, complete commands
- * will be processed right away.
- * TODO comments: return values etc
+ * Process the raw IRC data stored in `buf`, which has a size of len bytes.
+ * Incomplete commands will be buffered in state->buffer, complete commands 
+ * will be processed right away. Returns 0 on success, -1 if out of memory.
  */
 int libtwirc_process_data(struct twirc_state *state, const char *buf, size_t len)
 {
