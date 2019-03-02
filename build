@@ -1,1 +1,1 @@
-gcc -g -Wall src/kaul.c src/tcpsnob/tcpsnob.c src/libtwirc.c -o bin/kaul -DBUILD=$(date +"%g%m%d.%H%M%S")
+gcc -g -Wall src/client.c src/tcpsnob/tcpsnob.c src/libtwirc.c -o bin/client -lpthread -DBUILD=$(date +"%g%m%d.%H%M%S")
