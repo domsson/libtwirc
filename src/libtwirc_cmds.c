@@ -2,6 +2,16 @@
 #include "libtwirc.h"
 
 /*
+ * Convenience function that sends the provided message to the IRC server 
+ * as-is (the only modification being that it will add the required \n\r
+ * as required by IRC); this is the same as using twirc_send().
+ */
+int twirc_cmd_raw(struct twirc_state *state, const char *msg)
+{
+	return twirc_send(state, msg);
+}
+
+/*
  * Sends the PASS command to the server, with the pass appended as parameter.
  * This is the first part of the authentication process (next part is NICK).
  * Returns 0 if the command was sent successfully, -1 on error.

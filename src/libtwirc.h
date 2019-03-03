@@ -282,6 +282,7 @@ char *twirc_tag_by_key(twirc_tag_t **tags, const char *key);
 int twirc_loop(twirc_state_t *s, int timeout);
 int twirc_tick(twirc_state_t *s, int timeout);
 
+int twirc_cmd_raw(twirc_state_t *s, const char *pass);
 int twirc_cmd_pass(twirc_state_t *s, const char *pass);
 int twirc_cmd_nick(twirc_state_t *s, const char *nick);
 int twirc_cmd_join(twirc_state_t *s, const char *chan);

@@ -80,9 +80,7 @@ void handle_welcome(struct twirc_state *s, struct twirc_event *evt)
  */
 void handle_join(struct twirc_state *s, struct twirc_event *evt)
 {
-	//fprintf(stdout, "*** %s joined %s\n", evt->nick, evt->channel);
-
-	if (evt->nick && strcmp(evt->nick, "kaulmate") == 0
+	if (evt->origin && strcmp(evt->origin, "kaulmate") == 0
 	    && strcmp(evt->params[0], "#domsson") == 0)
 	{
 			twirc_cmd_privmsg(s, "#domsson", "jobruce is the best!");
@@ -98,7 +96,7 @@ void handle_privmsg(struct twirc_state *s, struct twirc_event *evt)
 	fprintf(stdout, "[%02d:%02d:%02d] [%s] (%s) %s: %s\n", 
 			tm.tm_hour, tm.tm_min, tm.tm_sec, 
 			color ? color : "#XXXXXX", 
-			evt->channel, evt->nick, evt->message);
+			evt->channel, evt->origin, evt->message);
 }
 
 void handle_action(struct twirc_state *s, struct twirc_event *evt)
@@ -108,7 +106,7 @@ void handle_action(struct twirc_state *s, struct twirc_event *evt)
 
 	fprintf(stdout, "[%02d:%02d:%02d] (%s) * %s %s\n",
 			tm.tm_hour, tm.tm_min, tm.tm_sec,
-			evt->channel, evt->nick, evt->message);
+			evt->channel, evt->origin, evt->message);
 }
 
 void handle_whisper(struct twirc_state *s, struct twirc_event *evt)
@@ -118,7 +116,7 @@ void handle_whisper(struct twirc_state *s, struct twirc_event *evt)
 
 	fprintf(stdout, "[%02d:%02d:%02d] (whisper) %s: %s\n",
 			tm.tm_hour, tm.tm_min, tm.tm_sec,
-			evt->nick, evt->message);
+			evt->origin, evt->message);
 }
 
 void handle_disconnect(struct twirc_state *s, struct twirc_event *evt)
