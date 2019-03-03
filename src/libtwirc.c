@@ -257,7 +257,7 @@ void twirc_free(struct twirc_state *s)
 
 /*
  * Schwarzeneggers the connection with the server and frees the twirc_state.
- * This means: do not call twirc_free() after calling twirc_kill()
+ * Hence, do not call twirc_free() after this function, it's already done.
  */
 void twirc_kill(struct twirc_state *s)
 {

@@ -111,6 +111,10 @@
 // was called Justin TV a while back?
 #define TWIRC_CMD_CHANNEL "#jtv"
 
+/*
+ * Structures
+ */
+
 struct twirc_state;
 
 struct twirc_login
@@ -247,19 +251,23 @@ typedef struct twirc_callbacks twirc_callbacks_t;
 
 struct twirc_state
 {
-	int status : 8;                    // connection status
-	int ip_type;                       // ip type, ipv4 or ipv6
-	int socket_fd;                     // tcp socket file descriptor
-	char *buffer;                      // irc message buffer
-	twirc_login_t login;               // irc login data 
-	twirc_user_t user;                 // twitch user details
-	twirc_callbacks_t cbs;             // event callbacks
+	int status : 8;                    // Connection/login status
+	int ip_type;                       // IP type, IPv4 or IPv6
+	int socket_fd;                     // TCP socket file descriptor
+	char *buffer;                      // IRC message buffer
+	twirc_login_t login;               // IRC login data 
+	twirc_user_t user;                 // Twitch user details
+	twirc_callbacks_t cbs;             // Event callbacks
 	int epfd;                          // epoll file descriptor
-	int error;                         // last error that occured
-	void *context;                     // pointer to user data
+	int error;                         // Last error that occured
+	void *context;                     // Pointer to user data
 };
 
-typedef struct twirc_state     twirc_state_t;
+typedef struct twirc_state twirc_state_t;
+
+/*
+ * Public functions
+ */
 
 struct twirc_state *twirc_init();
 struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
