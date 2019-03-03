@@ -1022,7 +1022,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outgoing)
 	err = libtwirc_parse_ctcp(&evt);
 
 	// Extract the nick from the prefix, maybe
-	evt.nick = libtwirc_parse_nick(evt.prefix);
+	evt.origin = libtwirc_parse_nick(evt.prefix);
 	
 	if (outgoing)
 	{
@@ -1042,7 +1042,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outgoing)
 	libtwirc_free_tags(evt.tags);
 	free(evt.raw);
 	free(evt.prefix);
-	free(evt.nick);
+	free(evt.origin);
 	free(evt.target);
 	free(evt.command);
 	free(evt.ctcp);

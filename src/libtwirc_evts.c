@@ -17,14 +17,15 @@ void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
 }
 
 /*
- * Is being called for every message we sent to the IRC server.
+ * Is being called for every message we sent to the IRC server. Note that the 
+ * convenience members of the event struct ("nick", "channel", etc) will all
+ * be NULL, as we're not looking at what kind of command/message was sent. 
+ * The raw message, as well as the raw parts ("prefix", "command", etc) will
+ * all be available, however.
  */
 void libtwirc_on_outgoing(struct twirc_state *s, struct twirc_event *evt)
 {
-	// There should be nothing to do here as this callback will handle 
-	// all of the possible outgoing messages/events, so we are not going
-	// to account for every single one - this means that for outgoing 
-	// events, the convenience members 'nick', 'channel' etc will be NULL
+	// Nothing, otherwise we'd have to have a ton of if and else
 }
 
 /*
@@ -89,7 +90,7 @@ void libtwirc_on_ping(struct twirc_state *s, struct twirc_event *evt)
 }
 
 /*
- * Join a channel.
+ * When a user joins a channel we are in. The user might be us.
  * 
  * > :<user>!<user>@<user>.tmi.twitch.tv JOIN #<channel>
  */
@@ -104,7 +105,8 @@ void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
  * > :jtv MODE #<channel> +o <user>
  * > :jtv MODE #<channel> -o <user>
  * 
- * Note: I've never actually seen this message being sent.
+ * Note: I've never actually seen this message being sent, even when
+ *       giving/revoking mod status to/from the test bot.
  */
 void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
 {

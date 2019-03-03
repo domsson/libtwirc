@@ -204,7 +204,7 @@ struct twirc_event
 	size_t num_tags;                   // Number of elements in tags
 	
 	// For convenience
-	char *nick;                        // Nick as extracted from prefix
+	char *origin;                      // Nick as extracted from prefix
 	char *channel;                     // Channel as extracted from params
 	char *target;                      // Target user of hosts, bans, etc.
 	char *message;                     // Message as extracted from params
