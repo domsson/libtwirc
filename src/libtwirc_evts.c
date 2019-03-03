@@ -5,25 +5,26 @@
 /*
  * This dummy callback function does absolutely nothing.
  * However, it allows us to make sure that all callbacks are non-NULL, removing 
- * the need to check for NULL everytime before we call them. On the other hand,
- * this does introduce the overhead of a function call instead of a NULL-check.
- * This is probably worse, performance-wise, but as long we don't run into any
- * performance problems, I prefer this as it makes for a much leaner code. 
+ * the need to check for NULL everytime before we call them. It makes the code 
+ * cleaner but brings the overhead of a function call instead of a NULL-check.
+ * I prefer this approach as long we don't run into any performance problems. 
  * Maybe `static inline` enables the compiler to optimize the overhead.
  */
 static inline
 void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
 {
-	// Nothing in here. That's on purpose.
-}
-
-void libtwirc_on_outgoing(struct twirc_state *s, struct twirc_event *evt)
-{
-	// Let's see..
+	// Nothing in here - that's on purpose
 }
 
 /*
- * Invalid IRC Commands
+ * Is being called for every message we sent to the IRC server.
+ */
+void libtwirc_on_outgoing(struct twirc_state *s, struct twirc_event *evt)
+{
+	// There should be nothing to do here
+}
+
+/*
  * If you send an invalid command, you will get a 421 message back:
  *
  * < WHO #<channel>
@@ -116,7 +117,18 @@ void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_names(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	if (evt->num_params < 2)
+	{
+		return;
+	}
+	if (evt->params[1][0] == '=' && evt->num_params >= 3)
+	{
+		evt->channel = evt->params[2];
+	}
+	else
+	{
+		evt->channel = evt->params[1];
+	}
 }
 
 /*
@@ -133,11 +145,22 @@ void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
  * Temporary or permanent ban on a channel. 
  * > @ban-duration=<ban-duration> :tmi.twitch.tv CLEARCHAT #<channel> :<user>
  *
+ * According to actual tests, a /ban command will emit the following two messages:
+ * > @room-id=<room-id>;target-user-id=<user-id>;tmi-sent-ts=<timestamp> 
+ *   :tmi.twitch.tv CLEARCHAT #<channel> :<user>
+ * > @msg-id=ban_success :tmi.twitch.tv NOTICE #<channel> 
+ *   :<user> is now banned from this channel.
+ *
+ * Also, I've figured out that the CLEARCHAT message will also be triggered
+ * when a mod issued the /clear command to clear the entire chat history:
+ * > @room-id=<room-id>;tmi-sent-ts=<timestamp> :tmi.twitch.tv CLEARCHAT #<channel>
+ * 
  * ban-duration: (Optional) Duration of the timeout, in seconds.
  *               If omitted, the ban is permanent.
- * 
- * TODO: Figure out how we can know WHO banned <user>
- *       (as the prefix doesn't seem to contain the nick?)
+ *
+ * Note that there is no way to figure out who banned the user. This is by
+ * design as "users could scrape it, and use it to target the mods that timed 
+ * them out or banned them." 
  */
 void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
 {
