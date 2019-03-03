@@ -65,73 +65,6 @@ int twirc_connect(struct twirc_state *s, const char *host, const char *port, con
 }
 
 /*
- * Sends data to the IRC server, using the state's socket.
- * On success, returns the number of bytes sent.
- * On error, -1 is returned and errno is set appropriately.
- */
-int twirc_send(struct twirc_state *state, const char *msg)
-{
-	// Get the actual message length (without null terminator)
-	// If the message is too big for the message buffer, we only
-	// grab as much as we can fit in our buffer (we truncate)
-	size_t msg_len = strnlen(msg, TWIRC_BUFFER_SIZE - 3);
-
-	// Create a perfectly sized buffer (max TWIRC_BUFFER_SIZE)
-	size_t buf_len = msg_len + 3;
-	char *buf = malloc(buf_len * sizeof(char));
-
-	// Copy the user's message into our slightly larger buffer
-	snprintf(buf, buf_len, "%s", msg);
-
-	// Use the additional space for line and null terminators
-	// IRC messages need to be CR-LF (\r\n) terminated!
-	buf[msg_len+0] = '\r';
-	buf[msg_len+1] = '\n';
-	buf[msg_len+2] = '\0';
-
-	// Actually send the message
-	int ret = tcpsnob_send(state->socket_fd, buf, buf_len);
-	
-	// Dispatch the outgoing event
-	libtwirc_process_msg(state, msg, 1);
-
-	free(buf);
-
-	return ret;
-}
-
-/*
- * Reads data from the socket and copies it into the provided buffer `buf`.
- * Returns the number of bytes read or 0 if there was no more data to read.
- * If an error occured, -1 will be returned (check errno); this usually means
- * the connection has been lost or some error has occurred on the socket.
- */
-int twirc_recv(struct twirc_state *state, char *buf, size_t len)
-{
-	// Receive data
-	ssize_t res_len;
-	res_len = tcpsnob_receive(state->socket_fd, buf, len - 1);
-
-	// Check if tcpsno_receive() reported an error
-	if (res_len == -1)
-	{
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
-		{
-			// Simply no more data to read right now - all good
-			return 0;
-		}
-		// Every other error, however, indicates some serious problem
-		return -1;
-	}
-	
-	// Make sure that the received data is null terminated
-	buf[res_len] = '\0';
-
-	// Return the number of bytes received
-	return res_len;
-}
-
-/*
  * Requests all supported capabilities from the Twitch servers.
  * Returns 0 if the request was sent successfully, -1 on error.
  */
@@ -311,30 +244,28 @@ void libtwirc_free_user(struct twirc_state *s)
 /*
  * Frees the twirc_state and all of its members.
  */
-int twirc_free(struct twirc_state *s)
+void twirc_free(struct twirc_state *s)
 {
+	close(s->epfd);
 	libtwirc_free_callbacks(s);
 	libtwirc_free_login(s);
 	libtwirc_free_user(s);
 	free(s->buffer);
 	free(s);
 	s = NULL;
-	return 0;
 }
 
 /*
  * Schwarzeneggers the connection with the server and frees the twirc_state.
  * This means: do not call twirc_free() after calling twirc_kill()
  */
-int twirc_kill(struct twirc_state *s)
+void twirc_kill(struct twirc_state *s)
 {
 	if (twirc_is_connected(s))
 	{
 		twirc_disconnect(s);
 	}
-	close(s->epfd);
 	twirc_free(s);
-	return 0; 
 }
 
 /*
@@ -450,9 +381,6 @@ size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
  * Takes an escaped string (as described in the IRCv3 spec, section tags)
  * and returns a pointer to a malloc'd string that holds the unescaped string.
  * Remember that the returned pointer has to be free'd by the caller!
- *
- * TODO: This is untested as of yet! We need to run some escaped
- *       strings through here and check if they come out as expected.
  */
 char *libtwirc_unescape(const char *str)
 {
@@ -646,9 +574,7 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 
 	free(tag_str);
 	
-	// TODO should we re-alloc to use exactly the amount of memory we need
-	// for the number of tags extracted (i), or would it be faster to just
-	// go with what we have? In other words, CPU vs. memory, which one?
+	// Trim this down to the exact right size
 	if (i < num_tags - 1)
 	{
 		*tags = realloc(*tags, (i + 1) * sizeof(struct twirc_tag*));
@@ -768,9 +694,7 @@ const char *libtwirc_parse_params(const char *msg, char ***params, size_t *len, 
 	
 	free(p_str);
 
-	// Make sure we only use as much memory as we have to
-	// TODO Figure out if this is actually worth the CPU cycles.
-	//      After all, a couple of pointers don't each much RAM.
+	// Trim this down to the exact amount of memory we need
 	if (num_tokens < num_params - 1)
 	{
 		*params = realloc(*params, (num_tokens + 1) * sizeof(char*));
@@ -846,8 +770,8 @@ void libtwirc_dispatch_out(struct twirc_state *state, struct twirc_event *evt)
  */
 void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 {
-	// TODO order these by most frequent (statistically), so that we waste as
-	// little CPU cycles as possible on string comparison via strcmp() here!
+	// TODO try ordering these by "probably usually most frequent", so that
+	// we waste as little CPU cycles as possible on strcmp() here!
 	
 	if (strcmp(evt->command, "PRIVMSG") == 0)
 	{
@@ -1206,6 +1130,74 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 	// Handled everything and no disconnect/error occurred
 	return 0;
 }
+
+/*
+ * Sends data to the IRC server, using the state's socket.
+ * On success, returns the number of bytes sent.
+ * On error, -1 is returned and errno is set appropriately.
+ */
+int twirc_send(struct twirc_state *state, const char *msg)
+{
+	// Get the actual message length (without null terminator)
+	// If the message is too big for the message buffer, we only
+	// grab as much as we can fit in our buffer (we truncate)
+	size_t msg_len = strnlen(msg, TWIRC_BUFFER_SIZE - 3);
+
+	// Create a perfectly sized buffer (max TWIRC_BUFFER_SIZE)
+	size_t buf_len = msg_len + 3;
+	char *buf = malloc(buf_len * sizeof(char));
+
+	// Copy the user's message into our slightly larger buffer
+	snprintf(buf, buf_len, "%s", msg);
+
+	// Use the additional space for line and null terminators
+	// IRC messages need to be CR-LF (\r\n) terminated!
+	buf[msg_len+0] = '\r';
+	buf[msg_len+1] = '\n';
+	buf[msg_len+2] = '\0';
+
+	// Actually send the message
+	int ret = tcpsnob_send(state->socket_fd, buf, buf_len);
+	
+	// Dispatch the outgoing event
+	libtwirc_process_msg(state, msg, 1);
+
+	free(buf);
+
+	return ret;
+}
+
+/*
+ * Reads data from the socket and copies it into the provided buffer `buf`.
+ * Returns the number of bytes read or 0 if there was no more data to read.
+ * If an error occured, -1 will be returned (check errno); this usually means
+ * the connection has been lost or some error has occurred on the socket.
+ */
+int twirc_recv(struct twirc_state *state, char *buf, size_t len)
+{
+	// Receive data
+	ssize_t res_len;
+	res_len = tcpsnob_receive(state->socket_fd, buf, len - 1);
+
+	// Check if tcpsno_receive() reported an error
+	if (res_len == -1)
+	{
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		{
+			// Simply no more data to read right now - all good
+			return 0;
+		}
+		// Every other error, however, indicates some serious problem
+		return -1;
+	}
+	
+	// Make sure that the received data is null terminated
+	buf[res_len] = '\0';
+
+	// Return the number of bytes received
+	return res_len;
+}
+
 
 /*
  * Waits timeout milliseconds for events to happen on the IRC connection.

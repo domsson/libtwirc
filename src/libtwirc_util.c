@@ -33,6 +33,10 @@ int twirc_is_logged_in(const struct twirc_state *state)
 	return state->status & TWIRC_STATUS_AUTHENTICATED ? 1 : 0;
 }
 
+/*
+ * Searches the provided array of twirc_tag structs for a tag with the 
+ * provided key, then returns a pointer to that tag's value.
+ */
 char *twirc_tag_by_key(struct twirc_tag **tags, const char *key)
 {
 	for (int i = 0; tags[i] != NULL; ++i)
