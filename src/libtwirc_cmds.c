@@ -131,6 +131,7 @@ int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *m
  * The answer will be in the form of a NOTICE with the msg-id tag set to 
  * "room_mods" and a message like "The moderators of this channel are: <list>",
  * where list is a comma-and-space separated list of the moderators nicks.
+ * If the channel has no moderators, the msg-id tag will be "no_mods" instead.
  */
 int twirc_cmd_mods(struct twirc_state *state, const char *chan)
 {
@@ -138,6 +139,20 @@ int twirc_cmd_mods(struct twirc_state *state, const char *chan)
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/mods", chan);
 	return twirc_send(state, privmsg);
 }
+
+/*
+ * Requests a list of the channel's VIPs, both offline and online.
+ * The answer will be in the form of a NOTICE with the msg-id tag set to either
+ * "room_vips" or "no_vips" if the room doesn't have any VIPs
+ */
+int twirc_cmd_vips(struct twirc_state *state, const char *chan)
+{
+	// Usage: "/vips" - Lists the VIPs of this channel
+	char privmsg[TWIRC_BUFFER_SIZE];
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/vips", chan);
+	return twirc_send(state, privmsg);
+}
+
 
 /*
  * Change your color to the specified one. If you're a turbo user, this can be
@@ -156,6 +171,20 @@ int twirc_cmd_color(struct twirc_state *state, const char *color)
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/color %s", 
 			TWIRC_CMD_CHANNEL, color);
+	return twirc_send(state, privmsg);
+}
+
+/*
+ * Broadcasters and Moderators only:
+ * Delete the message with the specified id in the given channel.
+ * TODO This has yet to be tested, the usage is still unclear to me.
+ */
+int twirc_cmd_delete(struct twirc_state *state, const char *chan, const char *id)
+{
+	// @msg-id=usage_delete :tmi.twitch.tv NOTICE #domsson :%!(EXTRA string=delete)
+	char privmsg[TWIRC_BUFFER_SIZE];
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/delete %s",
+			chan, id);
 	return twirc_send(state, privmsg);
 }
 
@@ -432,6 +461,44 @@ int twirc_cmd_unmod(struct twirc_state *state, const char *chan, const char *nic
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/unmod %s", chan, nick);
 	return twirc_send(state, privmsg);
+}
+
+/*
+ * Broadcaster only:
+ * Give VIP status to the given user in the given channel.
+ */
+int twirc_cmd_vip(struct twirc_state *state, const char *chan, const char *nick)
+{
+	char privmsg[TWIRC_BUFFER_SIZE];
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/vip %s", chan, nick);
+	return twirc_send(state, privmsg);
+}
+
+/*
+ * Broadcaster only:
+ * Remove VIP status from the user with the given nick in the given channel.
+ */
+int twirc_cmd_unvip(struct twirc_state *state, const char *chan, const char *nick)
+{
+	char privmsg[TWIRC_BUFFER_SIZE];
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/unvip %s", chan, nick);
+	return twirc_send(state, privmsg);
+}
+
+/*
+ * Adds a stream marker at the current timestamp. Comment is optional and can 
+ * be set to NULL. If comment is used, it should not exceed 140 characters.
+ */
+int twirc_cmd_marker(struct twirc_state *state, const char *chan, const char *comment)
+{
+	// Usage: "/marker" - Adds a stream marker (with an optional comment, 
+	// max 140 characters) at the current timestamp. You can use markers 
+	// in the Highlighter for easier editing.
+	char privmsg[TWIRC_BUFFER_SIZE];
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/marker %s", 
+			chan, comment == NULL ? "" : comment);
+	return twirc_send(state, privmsg);
+
 }
 
 /*

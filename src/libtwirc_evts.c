@@ -21,7 +21,10 @@ void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_outgoing(struct twirc_state *s, struct twirc_event *evt)
 {
-	// There should be nothing to do here
+	// There should be nothing to do here as this callback will handle 
+	// all of the possible outgoing messages/events, so we are not going
+	// to account for every single one - this means that for outgoing 
+	// events, the convenience members 'nick', 'channel' etc will be NULL
 }
 
 /*
@@ -73,7 +76,7 @@ void libtwirc_on_globaluserstate(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_capack(struct twirc_state *s, struct twirc_event *evt)
 {
-	// Maybe we should keep track of what capabilities have been 
+	// TODO Maybe we should keep track of what capabilities have been 
 	// acknowledged by the server, so the user can query it if need be?
 }
 
@@ -100,6 +103,8 @@ void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
  *
  * > :jtv MODE #<channel> +o <user>
  * > :jtv MODE #<channel> -o <user>
+ * 
+ * Note: I've never actually seen this message being sent.
  */
 void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
 {
@@ -117,17 +122,15 @@ void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_names(struct twirc_state *s, struct twirc_event *evt)
 {
-	if (evt->num_params < 2)
-	{
-		return;
-	}
-	if (evt->params[1][0] == '=' && evt->num_params >= 3)
+	if (strcmp(evt->command, "353") == 0 && evt->num_params > 2)
 	{
 		evt->channel = evt->params[2];
+		return;
 	}
-	else
+	if (strcmp(evt->command, "366") == 0 && evt->num_params > 1)
 	{
 		evt->channel = evt->params[1];
+		return;
 	}
 }
 
@@ -208,17 +211,11 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO got to figure out the exact syntax:
-	//      - Channels without # ?
-	//      - number-of-viewers is '-' when not given?
-	//      - channel and number-of-viewers are together the trailing param?
 	evt->channel = evt->params[0];
 
+	// Extract the username from the trailing parameter
 	char *sp = strstr(evt->params[1], " ");
-	if (sp == NULL)
-	{
-		return;
-	}
+	if (sp == NULL) { return; }
 	evt->target = strndup(evt->params[1], sp - evt->params[1] + 1);
 }
 
