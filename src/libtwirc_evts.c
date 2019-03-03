@@ -189,7 +189,7 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
 }
 
 /*
- * Channel starts or stops host mode.
+ * A joined channel starts or stops host mode.
  *
  * Start:
  * > :tmi.twitch.tv HOSTTARGET #hosting_channel <channel> [<number-of-viewers>]
@@ -199,8 +199,9 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
  *
  * number-of-viewers: (Optional) Number of viewers watching the host.
  *
- * Example (as seen):
- * > :tmi.twitch.tv HOSTTARGET #domsson :fujioka_twitch -
+ * Example (as seen) for host start:
+ * > :tmi.twitch.tv HOSTTARGET #domsson :foxxwounds -
+ * @msg-id=host_on :tmi.twitch.tv NOTICE #domsson :Now hosting foxxwounds.
  *
  * Example (as seen) for host start:
  * > :tmi.twitch.tv HOSTTARGET #domsson :bawnsai 0
@@ -215,10 +216,19 @@ void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
 {
 	evt->channel = evt->params[0];
 
-	// Extract the username from the trailing parameter
+	// Check if there is a space in the trailing parameter
 	char *sp = strstr(evt->params[1], " ");
 	if (sp == NULL) { return; }
+	
+	// Extract the username from the trailing parameter
 	evt->target = strndup(evt->params[1], sp - evt->params[1] + 1);
+	
+	// If the username was "-", we set it to NULL for better indication
+	if (strcmp(evt->target, "-") == 0)
+	{
+		free(evt->target);
+		evt->target = NULL;
+	}
 }
 
 /*
