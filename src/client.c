@@ -65,10 +65,6 @@ void handle_disconnect(struct twirc_state *s, struct twirc_event *evt)
 void handle_everything(struct twirc_state *s, struct twirc_event *evt)
 {
 	fprintf(stdout, "> %s\n", evt->raw);
-	if (evt->target)
-	{
-		fprintf(stdout, "  '--> target = %s\n", evt->target);
-	}
 }
 
 void handle_outgoing(struct twirc_state *s, struct twirc_event *evt)

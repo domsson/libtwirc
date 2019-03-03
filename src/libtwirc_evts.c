@@ -186,6 +186,7 @@ void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
 void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
 {
 	evt->channel = evt->params[0];
+	evt->message = evt->params[evt->trailing];
 }
 
 /*
@@ -314,15 +315,8 @@ void libtwirc_on_reconnect(struct twirc_state *s, struct twirc_event *evt)
  * message:      The message.
  * mod:          1 if the user has a moderator badge; otherwise, 0.
  * room-id:      The channel ID.
- * subscriber:   (Deprecated, use badges instead) 1 if the user has a
- *               subscriber badge; otherwise, 0.
  * tmi-sent-ts:  Timestamp when the server received the message.
- * turbo:        (Deprecated, use badges instead) 1 if the user has a Turbo 
- *               badge; otherwise, 0.
  * user-id:      The user’s ID.
- * user-type:    (Deprecated, use badges instead) The user’s type. Valid values: 
- *               mod, global_mod, admin, staff. If the broadcaster is not any of
- *               these user types, this field is left empty.
  */
 void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
@@ -479,8 +473,6 @@ void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
  * now, sending a whisper to the bot does arrive as a regular IRC message, more
  * precisely as a WHISPER message. Example:
  *
- * https://discuss.dev.twitch.tv/t/what-are-specifics-of-irc-chat-and-whispering-noob-solved-i-think/6175/8
- *
  * @badges=;color=#DAA520;display-name=domsson;emotes=;message-id=7;
  *  thread-id=65269353_274538602;turbo=0;user-id=65269353;user-type= 
  *   :domsson!domsson@domsson.tmi.twitch.tv WHISPER kaulmate :hey kaul!
@@ -488,6 +480,7 @@ void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
 void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
 {
 	evt->message = evt->params[evt->trailing];
+	evt->target  = evt->params[0];
 }
 
 /*
@@ -495,9 +488,14 @@ void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_other(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	// As we don't know what kind of event this is, we do nothing here
 }
 
+/*
+ * This is not triggered by an actual IRC message, but by libtwirc once it 
+ * detects that a connection to the IRC server has been established. Hence,
+ * there is no twirc_event struct for this callback.
+ */
 void libtwirc_on_connect(struct twirc_state *s)
 {
 	// Set status to connected (discarding all other flags)
@@ -511,6 +509,11 @@ void libtwirc_on_connect(struct twirc_state *s)
 	twirc_auth(s);
 }
 
+/*
+ * This is not triggered by an actual IRC message, but by libtwirc once it 
+ * detects that the connection to the IRC server has been lost. Hence, there
+ * is no twirc_event struct for this callback.
+ */
 void libtwirc_on_disconnect(struct twirc_state *s)
 {
 	// Set status to disconnected (discarding all other flags)
