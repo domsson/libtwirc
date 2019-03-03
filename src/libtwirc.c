@@ -1043,6 +1043,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outgoing)
 	free(evt.raw);
 	free(evt.prefix);
 	free(evt.nick);
+	free(evt.target);
 	free(evt.command);
 	free(evt.ctcp);
 	libtwirc_free_params(evt.params);

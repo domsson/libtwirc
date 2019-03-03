@@ -194,8 +194,17 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
  *
  * number-of-viewers: (Optional) Number of viewers watching the host.
  *
- * Example:
+ * Example (as seen):
  * > :tmi.twitch.tv HOSTTARGET #domsson :fujioka_twitch -
+ *
+ * Example (as seen) for host start:
+ * > :tmi.twitch.tv HOSTTARGET #domsson :bawnsai 0
+ * > @msg-id=host_on :tmi.twitch.tv NOTICE #domsson :Now hosting bawnsai.
+ *
+ * Example (as seen) for host stop:
+ * > :tmi.twitch.tv HOSTTARGET #domsson :- 0
+ * > @msg-id=host_off :tmi.twitch.tv NOTICE #domsson :Exited host mode.
+ *
  */
 void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
 {
@@ -204,6 +213,13 @@ void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
 	//      - number-of-viewers is '-' when not given?
 	//      - channel and number-of-viewers are together the trailing param?
 	evt->channel = evt->params[0];
+
+	char *sp = strstr(evt->params[1], " ");
+	if (sp == NULL)
+	{
+		return;
+	}
+	evt->target = strndup(evt->params[1], sp - evt->params[1] + 1);
 }
 
 /*

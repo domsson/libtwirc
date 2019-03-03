@@ -206,6 +206,7 @@ struct twirc_event
 	// For convenience
 	char *nick;                        // Nick as extracted from prefix
 	char *channel;                     // Channel as extracted from params
+	char *target;                      // Target user of hosts, bans, etc.
 	char *message;                     // Message as extracted from params
 	char *ctcp;                        // CTCP commmand, if any
 };
