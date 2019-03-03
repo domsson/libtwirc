@@ -54,7 +54,6 @@ void handle_connect(struct twirc_state *s, struct twirc_event *evt)
 void handle_welcome(struct twirc_state *s, struct twirc_event *evt)
 {
 	fprintf(stdout, "*** logged in!\n");
-	twirc_cmd_join(s, "#domsson");
 }
 
 

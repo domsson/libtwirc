@@ -64,16 +64,24 @@ void libtwirc_on_welcome(struct twirc_state *s, struct twirc_event *evt)
 void libtwirc_on_globaluserstate(struct twirc_state *s, struct twirc_event *evt)
 {
 	s->status |= TWIRC_STATUS_AUTHENTICATED;
+	// TODO fill the twirc_user_t with information from this event
 }
 
+/*
+ * On "CAP * ACK" command, which confirms a requested capability.
+ */
 void libtwirc_on_capack(struct twirc_state *s, struct twirc_event *evt)
 {
-	// TODO
+	// Maybe we should keep track of what capabilities have been 
+	// acknowledged by the server, so the user can query it if need be?
 }
 
+/*
+ * Responds to incoming PING commands with a corresponding PONG.
+ */
 void libtwirc_on_ping(struct twirc_state *s, struct twirc_event *evt)
 {
-	twirc_cmd_pong(s, evt->params[0]);
+	twirc_cmd_pong(s, evt->num_params ? evt->params[0] : NULL);
 }
 
 /*

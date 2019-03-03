@@ -104,8 +104,12 @@
 #define TWIRC_NUM_PARAMS 4
 
 // For some reason, when sending whispers, we apparently have to use a channel
-// called #jtv - I don't get it, but it seems to work...
-#define TWIRC_WHISPER_CHANNEL "#jtv"
+// called #jtv - I don't get it, but it seems to work. The same strategy can be
+// helpful for channel-unspecific commands like /color, which we should be able
+// to use even if we aren't in any channel right now (or don't know which ones
+// we are currently in). Maybe it has something to do with the fact that Twitch
+// was called Justin TV a while back?
+#define TWIRC_CMD_CHANNEL "#jtv"
 
 struct twirc_state;
 
@@ -187,8 +191,10 @@ struct twirc_tags
 
 struct twirc_event
 {
+	// Raw data
 	char *raw;                         // The raw message as received
-	// 'Raw' data
+	
+	// Separated raw data
 	char *prefix;                      // IRC message prefix
 	char *command;                     // IRC message command
 	char **params;                     // IRC message parameter
@@ -226,7 +232,7 @@ struct twirc_callbacks
 	twirc_callback roomstate;          // Channel setting changed OR join
 	twirc_callback usernotice;         // Sub, resub, giftsub, raid, ritual
 	twirc_callback userstate;          // User joins or chats in channel (?)
-	twirc_callback clearchat;          // User was banned (temp or perm)
+	twirc_callback clearchat;          // Chat history purged or user banned
 	twirc_callback clearmsg;           // A chat message has been removed
 	twirc_callback hosttarget;         // Channel starts or stops host mode
 	twirc_callback reconnect;          // Server is going for a restart soon
@@ -279,15 +285,37 @@ int twirc_cmd_pass(twirc_state_t *s, const char *pass);
 int twirc_cmd_nick(twirc_state_t *s, const char *nick);
 int twirc_cmd_join(twirc_state_t *s, const char *chan);
 int twirc_cmd_part(twirc_state_t *s, const char *chan);
+int twirc_cmd_ping(twirc_state_t *s, const char *param);
+int twirc_cmd_pong(twirc_state_t *s, const char *param);
+int twirc_cmd_quit(twirc_state_t *s);
 int twirc_cmd_privmsg(twirc_state_t *s, const char *chan, const char *msg);
 int twirc_cmd_action(twirc_state_t *s, const char *chan, const char *msg);
 int twirc_cmd_whisper(twirc_state_t *s, const char *nick, const char *msg);
 int twirc_cmd_req_tags(twirc_state_t *s);
 int twirc_cmd_req_membership(twirc_state_t *s);
 int twirc_cmd_req_commands(twirc_state_t *s);
-int twirc_cmd_ping(twirc_state_t *s, const char *param);
-int twirc_cmd_pong(twirc_state_t *s, const char *param);
-int twirc_cmd_quit(twirc_state_t *s);
+int twirc_cmd_mods(twirc_state_t *s, const char *chan);
+int twirc_cmd_color(twirc_state_t *s, const char *color);
+int twirc_cmd_timeout(twirc_state_t *s, const char *chan, const char *nick, int secs, const char *reason);
+int twirc_cmd_untimeout(twirc_state_t *s, const char *chan, const char *nick);
+int twirc_cmd_ban(twirc_state_t *s, const char *chan, const char *nick, const char *reason);
+int twirc_cmd_unban(twirc_state_t *s, const char *chan, const char *nick);
+int twirc_cmd_slow(twirc_state_t *s, const char *chan, int secs);
+int twirc_cmd_slowoff(twirc_state_t *s, const char *chan);
+int twirc_cmd_followers(twirc_state_t *s, const char *chan, const char *time);
+int twirc_cmd_followersoff(twirc_state_t *s, const char *chan);
+int twirc_cmd_subscribers(twirc_state_t *s, const char *chan);
+int twirc_cmd_subscribersoff(twirc_state_t *s, const char *chan);
+int twirc_cmd_clear(twirc_state_t *s, const char *chan);
+int twirc_cmd_r9k(twirc_state_t *s, const char *chan);
+int twirc_cmd_r9koff(twirc_state_t *s, const char *chan);
+int twirc_cmd_emoteonly(twirc_state_t *s, const char *chan);
+int twirc_cmd_emoteonlyoff(twirc_state_t *s, const char *chan);
+int twirc_cmd_commercial(twirc_state_t *s, const char *chan, int secs);
+int twirc_cmd_host(twirc_state_t *s, const char *chan, const char *target);
+int twirc_cmd_unhost(twirc_state_t *s, const char *chan);
+int twirc_cmd_mod(twirc_state_t *s, const char *chan, const char *nick);
+int twirc_cmd_unmod(twirc_state_t *s, const char *chan, const char *nick);
 
 int twirc_is_connecting(const twirc_state_t *s);
 int twirc_is_logging_in(const twirc_state_t *s);
