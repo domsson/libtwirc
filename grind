@@ -1,1 +1,0 @@
-valgrind --leak-check=full --leak-check=full --show-leak-kinds=all -v ./bin/kaul

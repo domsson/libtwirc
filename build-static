@@ -1,0 +1,3 @@
+gcc -c -o obj/libtwirc.o src/libtwirc.c
+ar rcs lib/libtwirc.a obj/libtwirc.o
+rm obj/libtwirc.o

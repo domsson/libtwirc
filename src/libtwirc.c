@@ -4,7 +4,7 @@
 #include <unistd.h>     // close()
 #include <string.h>     // strlen(), strerror()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
-#include "tcpsnob/tcpsnob.h"
+#include "tcpsnob.h"
 #include "libtwirc.h"
 #include "libtwirc_cmds.c"
 #include "libtwirc_util.c"

@@ -1,1 +1,0 @@
-gcc -g -Wall src/client.c src/tcpsnob/tcpsnob.c src/libtwirc.c -o bin/client -lpthread -DBUILD=$(date +"%g%m%d.%H%M%S")

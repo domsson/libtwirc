@@ -107,6 +107,24 @@ void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
  * 
  * Note: I've never actually seen this message being sent, even when
  *       giving/revoking mod status to/from the test bot.
+ * 
+ *
+ * Update: I've now seen this happen after joining a channel... ONCE.
+ *         It happened on the #esl_csgo channel, where after join, I first 
+ *         received the NAMES list, followed by this, which happened to be 
+ *         the list of all moderators in the channel at that point in time:
+ *
+ * > :jtv MODE #esl_csgo +o logviewer
+ * > :jtv MODE #esl_csgo +o feralhelena
+ * > :jtv MODE #esl_csgo +o moobot
+ * > :jtv MODE #esl_csgo +o general23497
+ * > :jtv MODE #esl_csgo +o xhipgamer
+ * > :jtv MODE #esl_csgo +o xzii
+ * > :jtv MODE #esl_csgo +o 2divine
+ * > :jtv MODE #esl_csgo +o cent
+ * > :jtv MODE #esl_csgo +o x_samix_x
+ * > :jtv MODE #esl_csgo +o ravager01
+ * > :jtv MODE #esl_csgo +o doctorwigglez
  */
 void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
 {
