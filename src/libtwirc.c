@@ -161,7 +161,7 @@ void twirc_init_callbacks(struct twirc_callbacks *cbs)
 	cbs->disconnect      = libtwirc_on_null;
 	cbs->invalidcmd      = libtwirc_on_null;
 	cbs->other           = libtwirc_on_null;
-	cbs->outgoing        = libtwirc_on_null;
+	cbs->outbound        = libtwirc_on_null;
 }
 
 /*
@@ -760,8 +760,8 @@ int libtwirc_parse_ctcp(struct twirc_event *evt)
 
 void libtwirc_dispatch_out(struct twirc_state *state, struct twirc_event *evt)
 {
-	libtwirc_on_outgoing(state, evt);
-	state->cbs.outgoing(state, evt);
+	libtwirc_on_outbound(state, evt);
+	state->cbs.outbound(state, evt);
 }
 
 /*
@@ -922,7 +922,7 @@ void libtwirc_dispatch_ctcp(struct twirc_state *state, struct twirc_event *evt)
  * Returns 0 on success, -1 if an out of memory error occured during the
  * parsing/handling of a CTCP event.
  */
-int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outgoing)
+int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outbound)
 {
 	//fprintf(stderr, "> %s (%zu)\n", msg, strlen(msg));
 
@@ -949,7 +949,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outgoing)
 	// Extract the nick from the prefix, maybe
 	evt.origin = libtwirc_parse_nick(evt.prefix);
 	
-	if (outgoing)
+	if (outbound)
 	{
 		libtwirc_dispatch_out(s, &evt);
 	}

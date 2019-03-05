@@ -176,7 +176,7 @@ struct twirc_callbacks
 	twirc_callback disconnect;         // Connection interrupted
 	twirc_callback invalidcmd;         // Server doesn't recognise command
 	twirc_callback other;              // Everything else (for now)
-	twirc_callback outgoing;           // Messages we send TO the server
+	twirc_callback outbound;           // Messages we send TO the server
 };
 
 /*

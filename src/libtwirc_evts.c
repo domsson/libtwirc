@@ -23,7 +23,7 @@ void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
  * The raw message, as well as the raw parts ("prefix", "command", etc) will
  * all be available, however.
  */
-void libtwirc_on_outgoing(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_outbound(struct twirc_state *s, struct twirc_event *evt)
 {
 	// Nothing, otherwise we'd have to have a ton of if and else
 }
