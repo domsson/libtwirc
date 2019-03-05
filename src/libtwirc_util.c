@@ -49,3 +49,10 @@ char *twirc_tag_by_key(struct twirc_tag **tags, const char *key)
 	return NULL;
 }
 
+/*
+ * Return the error code of the last error or -1 if non occurred so far.
+ */
+int twirc_last_error(const struct twirc_state *state)
+{
+	return state->error;
+}

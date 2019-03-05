@@ -202,6 +202,7 @@ void  twirc_set_context(twirc_state_t *s, void *ctx);
 void *twirc_get_context(twirc_state_t *s);
 
 char *twirc_tag_by_key(twirc_tag_t **tags, const char *key);
+int twirc_last_error(const twirc_state_t *s);
 
 int twirc_loop(twirc_state_t *s, int timeout);
 int twirc_tick(twirc_state_t *s, int timeout);
