@@ -1,3 +1,4 @@
 gcc -o obj/libtwirc.o -c -Wall -Werror -fpic src/libtwirc.c
 gcc -shared obj/libtwirc.o -o lib/libtwirc.so
+cp src/libtwirc.h lib/libtwirc.h
 rm obj/libtwirc.o
