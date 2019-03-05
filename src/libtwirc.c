@@ -6,6 +6,7 @@
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include "tcpsnob.h"
 #include "libtwirc.h"
+#include "libtwirc_internal.h"
 #include "libtwirc_cmds.c"
 #include "libtwirc_util.c"
 #include "libtwirc_evts.c"
@@ -68,7 +69,7 @@ int twirc_connect(struct twirc_state *s, const char *host, const char *port, con
  * Requests all supported capabilities from the Twitch servers.
  * Returns 0 if the request was sent successfully, -1 on error.
  */
-int twirc_capreq(struct twirc_state *s)
+int libtwirc_capreq(struct twirc_state *s)
 {
 	// TODO chatrooms cap currently not implemented!
 	//      Once that's done, use the following line
@@ -90,7 +91,7 @@ int twirc_capreq(struct twirc_state *s)
  * otherwise just look out for the MOTD (starting with numeric command 001).
  * Returns 0 if both commands were send successfully, -1 on error.
  */
-int twirc_auth(struct twirc_state *s)
+int libtwirc_auth(struct twirc_state *s)
 {
 	if (twirc_cmd_pass(s, s->login.pass) == -1)
 	{
@@ -1060,7 +1061,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
 		int bytes_received = 0;
 		
 		// Fetch and process all available data from the socket
-		while ((bytes_received = twirc_recv(s, buf, TWIRC_BUFFER_SIZE)) > 0)
+		while ((bytes_received = libtwirc_recv(s, buf, TWIRC_BUFFER_SIZE)) > 0)
 		{
 			// Process the data and check if we ran out of memory doing so
 			if (libtwirc_process_data(s, buf, bytes_received) == -1)
@@ -1136,7 +1137,7 @@ int libtwirc_handle_event(struct twirc_state *s, struct epoll_event *epev)
  * On success, returns the number of bytes sent.
  * On error, -1 is returned and errno is set appropriately.
  */
-int twirc_send(struct twirc_state *state, const char *msg)
+int libtwirc_send(struct twirc_state *state, const char *msg)
 {
 	// Get the actual message length (without null terminator)
 	// If the message is too big for the message buffer, we only
@@ -1173,7 +1174,7 @@ int twirc_send(struct twirc_state *state, const char *msg)
  * If an error occured, -1 will be returned (check errno); this usually means
  * the connection has been lost or some error has occurred on the socket.
  */
-int twirc_recv(struct twirc_state *state, char *buf, size_t len)
+int libtwirc_recv(struct twirc_state *state, char *buf, size_t len)
 {
 	// Receive data
 	ssize_t res_len;

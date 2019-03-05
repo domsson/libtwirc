@@ -116,88 +116,23 @@
  */
 
 struct twirc_state;
+struct twirc_event;
+struct twirc_callbacks;
+struct twirc_login;
+struct twirc_user;
+struct twirc_tag;
 
-struct twirc_login
-{
-	char *host;
-	char *port;
-	char *nick;
-	char *pass;
-};
-
+typedef struct twirc_event twirc_event_t;
 typedef struct twirc_login twirc_login_t;
-
-struct twirc_user
-{
-	char *name;     // display-name
-	char *id;       // user-id
-	char color[8];  // color in chat
-};
-
 typedef struct twirc_user twirc_user_t;
-
-struct twirc_tag
-{
-	char *key;
-	char *value;
-};
-
 typedef struct twirc_tag twirc_tag_t;
-
-// https://pastebin.com/qzzvpuB6
-// TODO come up with a solution of how to hand the relevant meta data 
-//      of certain events to the user (in the callbacks) without adding
-//      a dozen function arguments; maybe use a twirc_tags struct that
-//      contains one member for each possible tag? But there are plenty!
-//      Alternatively, have two to three dedicated structs that will be
-//      set or be NULL depending on the type of event? For example, one 
-//      struct twirc_message_details, one struct twirc_user_details?
-/*
-struct twirc_tags
-{
-	char *badges;
-	int ban_duration;
-	int bits;
-	char *broadcaster_lang;
-	char *color;
-	char *display_name;
-	char *emotes;
-	int emote_only;
-	char *emote-sets;
-	int followers_only;
-	char *id;
-	char *login;
-	int mod;
-	char *msg_id;
-	// int msg_param_cumulative_months; -> msg_param_months
-	char *msg_param_display_name;
-	char *msg_param_login;
-	int msg_param_months;
-	char *msg_param_recipient_display_name;
-	char *msg_param_recipient_id;
-	char *msg_param_recipient_user_name;
-	int msg_param_should_share_streak;
-	int msg_param_streak_months;
-	char *msg-param-sub-plan;
-	char *msg-param-sub-plan-name;
-	int msg_param_viewer_count;
-	char *msg_param_ritual_name;
-	int r9k;
-	char *room_id;
-	int slow;
-	int subs_only;
-	char *system_msg;
-	char *target_msg_id;
-	char *tmi_sent_ts;
-	char *user_id;
-};
-*/
+typedef struct twirc_state twirc_state_t;
+typedef struct twirc_callbacks twirc_callbacks_t;
 
 struct twirc_event
 {
 	// Raw data
 	char *raw;                         // The raw message as received
-	
 	// Separated raw data
 	char *prefix;                      // IRC message prefix
 	char *command;                     // IRC message command
@@ -206,7 +141,6 @@ struct twirc_event
 	int trailing;                      // Index of the trailing param
 	twirc_tag_t **tags;                // IRC message tags
 	size_t num_tags;                   // Number of elements in tags
-	
 	// For convenience
 	char *origin;                      // Nick as extracted from prefix
 	char *channel;                     // Channel as extracted from params
@@ -214,8 +148,6 @@ struct twirc_event
 	char *message;                     // Message as extracted from params
 	char *ctcp;                        // CTCP commmand, if any
 };
-
-typedef struct twirc_event twirc_event_t;
 
 typedef void (*twirc_callback)(struct twirc_state *s, struct twirc_event *e);
 
@@ -247,24 +179,6 @@ struct twirc_callbacks
 	twirc_callback outgoing;           // Messages we send TO the server
 };
 
-typedef struct twirc_callbacks twirc_callbacks_t;
-
-struct twirc_state
-{
-	int status : 8;                    // Connection/login status
-	int ip_type;                       // IP type, IPv4 or IPv6
-	int socket_fd;                     // TCP socket file descriptor
-	char *buffer;                      // IRC message buffer
-	twirc_login_t login;               // IRC login data 
-	twirc_user_t user;                 // Twitch user details
-	twirc_callbacks_t cbs;             // Event callbacks
-	int epfd;                          // epoll file descriptor
-	int error;                         // Last error that occured
-	void *context;                     // Pointer to user data
-};
-
-typedef struct twirc_state twirc_state_t;
-
 /*
  * Public functions
  */
@@ -274,10 +188,12 @@ struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
 
 int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass);
 int twirc_disconnect(twirc_state_t *s);
+/*
 int twirc_send(twirc_state_t *s, const char *msg);
 int twirc_recv(twirc_state_t *s, char *buf, size_t len);
 int twirc_auth(twirc_state_t *s);
 int twirc_capreq(twirc_state_t *s);
+*/
 
 void twirc_kill(twirc_state_t *s);
 void twirc_free(twirc_state_t *s);

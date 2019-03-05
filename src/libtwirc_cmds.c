@@ -1,5 +1,6 @@
 #include <stdio.h>      // NULL, fprintf(), perror()
 #include "libtwirc.h"
+#include "libtwirc_internal.h"
 
 /*
  * Convenience function that sends the provided message to the IRC server 
@@ -8,7 +9,7 @@
  */
 int twirc_cmd_raw(struct twirc_state *state, const char *msg)
 {
-	return twirc_send(state, msg);
+	return libtwirc_send(state, msg);
 }
 
 /*
@@ -20,7 +21,7 @@ int twirc_cmd_pass(struct twirc_state *state, const char *pass)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "PASS %s", pass);
-	return twirc_send(state, msg);
+	return libtwirc_send(state, msg);
 }
 
 /*
@@ -32,7 +33,7 @@ int twirc_cmd_nick(struct twirc_state *state, const char *nick)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "NICK %s", nick);
-	return twirc_send(state, msg);
+	return libtwirc_send(state, msg);
 }
 
 /*
@@ -43,7 +44,7 @@ int twirc_cmd_join(struct twirc_state *state, const char *chan)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "JOIN %s", chan);
-	return twirc_send(state, msg);
+	return libtwirc_send(state, msg);
 }
 
 /*
@@ -54,7 +55,7 @@ int twirc_cmd_part(struct twirc_state *state, const char *chan)
 {
 	char msg[TWIRC_BUFFER_SIZE];
 	snprintf(msg, TWIRC_BUFFER_SIZE, "PART %s", chan);
-	return twirc_send(state, msg);
+	return libtwirc_send(state, msg);
 }
 
 /*
@@ -72,7 +73,7 @@ int twirc_cmd_pong(struct twirc_state *state, const char *param)
 	snprintf(pong, TWIRC_PONG_SIZE, "PONG %s%s", 
 			param && param[0] == ':' ? "" : ":",
 			param ? param : "");
-	return twirc_send(state, pong);
+	return libtwirc_send(state, pong);
 }
 
 /*
@@ -86,7 +87,7 @@ int twirc_cmd_ping(struct twirc_state *state, const char *param)
 	char ping[TWIRC_PONG_SIZE];
 	ping[0] = '\0';
 	snprintf(ping, TWIRC_PONG_SIZE, "PING %s", param ? param : "");
-	return twirc_send(state, ping);
+	return libtwirc_send(state, ping);
 }
 
 /*
@@ -95,7 +96,7 @@ int twirc_cmd_ping(struct twirc_state *state, const char *param)
  */
 int twirc_cmd_quit(struct twirc_state *state)
 {
-	return twirc_send(state, "QUIT");
+	return libtwirc_send(state, "QUIT");
 }
 
 /*
@@ -106,7 +107,7 @@ int twirc_cmd_privmsg(struct twirc_state *state, const char *chan, const char *m
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :%s", chan, msg);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -120,7 +121,7 @@ int twirc_cmd_action(struct twirc_state *state, const char *chan, const char *ms
 	action[0] = '\0';
 	snprintf(action, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :%cACTION %s%c",
 			chan, '\x01', msg, '\x01');
-	return twirc_send(state, action);
+	return libtwirc_send(state, action);
 }
 
 /*
@@ -133,7 +134,7 @@ int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *m
 	char whisper[TWIRC_MESSAGE_SIZE];
 	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :/w %s %s", 
 			TWIRC_CMD_CHANNEL, nick, msg);
-	return twirc_send(state, whisper);
+	return libtwirc_send(state, whisper);
 }
 
 /*
@@ -147,7 +148,7 @@ int twirc_cmd_mods(struct twirc_state *state, const char *chan)
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/mods", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -160,7 +161,7 @@ int twirc_cmd_vips(struct twirc_state *state, const char *chan)
 	// Usage: "/vips" - Lists the VIPs of this channel
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/vips", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 
@@ -181,7 +182,7 @@ int twirc_cmd_color(struct twirc_state *state, const char *color)
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/color %s", 
 			TWIRC_CMD_CHANNEL, color);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -195,7 +196,7 @@ int twirc_cmd_delete(struct twirc_state *state, const char *chan, const char *id
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/delete %s",
 			chan, id);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -217,7 +218,7 @@ int twirc_cmd_timeout(struct twirc_state *state, const char *chan, const char *n
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/timeout %s %.0d %s", 
 			chan, nick, secs, reason == NULL ? "" : reason);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -230,7 +231,7 @@ int twirc_cmd_untimeout(struct twirc_state *state, const char *chan, const char 
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/untimeout %s",
 			chan, nick);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -247,7 +248,7 @@ int twirc_cmd_ban(struct twirc_state *state, const char *chan, const char *nick,
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/ban %s %s", 
 			chan, nick, reason == NULL ? "" : reason);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -260,7 +261,7 @@ int twirc_cmd_unban(struct twirc_state *state, const char *chan, const char *nic
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/unban %s",
 			chan, nick);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -277,7 +278,7 @@ int twirc_cmd_slow(struct twirc_state *state, const char *chan, int secs)
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/slow %.0d",
 			chan, secs);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -289,7 +290,7 @@ int twirc_cmd_slowoff(struct twirc_state *state, const char *chan)
 	// Usage: "/slowoff" - Disables slow mode.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/slowoff", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -310,7 +311,7 @@ int twirc_cmd_followers(struct twirc_state *state, const char *chan, const char 
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/followers %s", 
 			chan, time == NULL ? "" : time);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -322,7 +323,7 @@ int twirc_cmd_followersoff(struct twirc_state *state, const char *chan)
 	// Usage: "/followersoff - Disables followers-only mode.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/followersoff", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -335,7 +336,7 @@ int twirc_cmd_subscribers(struct twirc_state *state, const char *chan)
 	// may chat in this channel). Use "subscribersoff" to disable.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/subscribers", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -347,7 +348,7 @@ int twirc_cmd_subscribersoff(struct twirc_state *state, const char *chan)
 	// Usage: "/subscribersoff" - Disables subscribers-only mode.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/subscribersoff", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -359,7 +360,7 @@ int twirc_cmd_clear(struct twirc_state *state, const char *chan)
 	// Usage: "/clear" - Clear chat history for all users in this room.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/clear", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -372,7 +373,7 @@ int twirc_cmd_r9k(struct twirc_state *state, const char *chan)
 	// Usage: "/r9kbeta" - Enables r9k mode. Use "r9kbetaoff" to disable.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/r9kbeta", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -384,7 +385,7 @@ int twirc_cmd_r9koff(struct twirc_state *state, const char *chan)
 	// Usage: "/r9kbetaoff" - Disables r9k mode.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/r9kbetaoff", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -398,7 +399,7 @@ int twirc_cmd_emoteonly(struct twirc_state *state, const char *chan)
 	// be used in chat). Use "emoteonlyoff" to disable.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/emoteonly", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -410,7 +411,7 @@ int twirc_cmd_emoteonlyoff(struct twirc_state *state, const char *chan)
 	// Usage: "/emoteonlyoff" - Disables emote-only mode.
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/emoteonlyoff", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -424,7 +425,7 @@ int twird_cmd_commercial(struct twirc_state *state, const char *chan, int secs)
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/commercial %.0d",
 			chan, secs);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -437,7 +438,7 @@ int twirc_cmd_host(struct twirc_state *state, const char *chan, const char *targ
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/host %s",
 			chan, target);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -448,7 +449,7 @@ int twirc_cmd_unhost(struct twirc_state *state, const char *chan)
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/unhost", chan);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -459,7 +460,7 @@ int twirc_cmd_mod(struct twirc_state *state, const char *chan, const char *nick)
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/mod %s", chan, nick);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -470,7 +471,7 @@ int twirc_cmd_unmod(struct twirc_state *state, const char *chan, const char *nic
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/unmod %s", chan, nick);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -481,7 +482,7 @@ int twirc_cmd_vip(struct twirc_state *state, const char *chan, const char *nick)
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/vip %s", chan, nick);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -492,7 +493,7 @@ int twirc_cmd_unvip(struct twirc_state *state, const char *chan, const char *nic
 {
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/unvip %s", chan, nick);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 }
 
 /*
@@ -507,7 +508,7 @@ int twirc_cmd_marker(struct twirc_state *state, const char *chan, const char *co
 	char privmsg[TWIRC_BUFFER_SIZE];
 	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/marker %s", 
 			chan, comment == NULL ? "" : comment);
-	return twirc_send(state, privmsg);
+	return libtwirc_send(state, privmsg);
 
 }
 
@@ -517,7 +518,7 @@ int twirc_cmd_marker(struct twirc_state *state, const char *chan, const char *co
  */
 int twirc_cmd_req_tags(struct twirc_state *state)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/tags");
+	return libtwirc_send(state, "CAP REQ :twitch.tv/tags");
 }
 
 /*
@@ -526,7 +527,7 @@ int twirc_cmd_req_tags(struct twirc_state *state)
  */
 int twirc_cmd_req_membership(struct twirc_state *state)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/membership");
+	return libtwirc_send(state, "CAP REQ :twitch.tv/membership");
 }
 
 /*
@@ -535,7 +536,7 @@ int twirc_cmd_req_membership(struct twirc_state *state)
  */
 int twirc_cmd_req_commands(struct twirc_state *state)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/commands");
+	return libtwirc_send(state, "CAP REQ :twitch.tv/commands");
 }
 
 /*
@@ -544,7 +545,7 @@ int twirc_cmd_req_commands(struct twirc_state *state)
  */
 int twirc_cmd_req_chatrooms(struct twirc_state *state)
 {
-	return twirc_send(state, "CAP REQ :twitch.tv/tags twitch.tv/commands");
+	return libtwirc_send(state, "CAP REQ :twitch.tv/tags twitch.tv/commands");
 }
 
 /*
@@ -553,7 +554,7 @@ int twirc_cmd_req_chatrooms(struct twirc_state *state)
  */
 int twirc_cmd_req_all(struct twirc_state *state)
 {
-	return twirc_send(state, 
+	return libtwirc_send(state, 
 	    "CAP REQ: twitch.tv/tags twitch.tv/commands twitch.tv/membership");
 }
 

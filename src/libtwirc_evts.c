@@ -69,7 +69,6 @@ void libtwirc_on_welcome(struct twirc_state *s, struct twirc_event *evt)
 void libtwirc_on_globaluserstate(struct twirc_state *s, struct twirc_event *evt)
 {
 	s->status |= TWIRC_STATUS_AUTHENTICATED;
-	// TODO fill the twirc_user_t with information from this event
 }
 
 /*
@@ -96,7 +95,10 @@ void libtwirc_on_ping(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
 }
 
 /*
@@ -128,7 +130,10 @@ void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
 }
 
 /*
@@ -161,7 +166,10 @@ void libtwirc_on_names(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
 }
 
 /*
@@ -187,7 +195,10 @@ void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
 }
 
 /*
@@ -203,8 +214,14 @@ void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
-	evt->message = evt->params[evt->trailing];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
+	if (evt->num_params > evt->trailing)
+	{
+		evt->message = evt->params[evt->trailing];
+	}
 }
 
 /*
@@ -233,14 +250,24 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
+
+	// If there is no trailing parameter, we exit early
+	if (evt->num_params <= evt->trailing)
+	{
+		return;
+	}
 
 	// Check if there is a space in the trailing parameter
-	char *sp = strstr(evt->params[1], " ");
+	char *sp = strstr(evt->params[evt->trailing], " ");
 	if (sp == NULL) { return; }
 	
 	// Extract the username from the trailing parameter
-	evt->target = strndup(evt->params[1], sp - evt->params[1] + 1);
+	evt->target = strndup(evt->params[evt->trailing], 
+			sp - evt->params[evt->trailing] + 1);
 	
 	// If the username was "-", we set it to NULL for better indication
 	if (strcmp(evt->target, "-") == 0)
@@ -267,8 +294,14 @@ void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_notice(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
-	evt->message = evt->params[evt->trailing];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
+	if (evt->num_params > evt->trailing)
+	{
+		evt->message = evt->params[evt->trailing];
+	}
 }
 
 /*
@@ -276,8 +309,14 @@ void libtwirc_on_notice(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_action(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
-	evt->message = evt->params[1];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
+	if (evt->num_params > evt->trailing)
+	{
+		evt->message = evt->params[evt->trailing];
+	}
 }
 
 /*
@@ -338,8 +377,14 @@ void libtwirc_on_reconnect(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
-	evt->message = evt->params[evt->trailing];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
+	if (evt->num_params > evt->trailing)
+	{
+		evt->message = evt->params[evt->trailing];
+	}
 }
 
 /*
@@ -369,7 +414,10 @@ void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_roomstate(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
 }
 
 /*
@@ -456,8 +504,14 @@ void libtwirc_on_roomstate(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_usernotice(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
-	evt->message = evt->num_params > 1 ? evt->params[1] : NULL;
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
+	if (evt->num_params > evt->trailing)
+	{
+		evt->message = evt->params[evt->trailing];
+	}
 }
 
 /*
@@ -482,7 +536,10 @@ void libtwirc_on_usernotice(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->channel = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->channel = evt->params[0];
+	}
 }
 
 /*
@@ -497,8 +554,14 @@ void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
  */
 void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
 {
-	evt->message = evt->params[evt->trailing];
-	evt->target  = evt->params[0];
+	if (evt->num_params > 0)
+	{
+		evt->target  = evt->params[0];
+	}
+	if (evt->num_params > evt->trailing)
+	{
+		evt->message = evt->params[evt->trailing];
+	}
 }
 
 /*
@@ -521,10 +584,10 @@ void libtwirc_on_connect(struct twirc_state *s)
 
 	// Request capabilities before login, so that we will receive the
 	// GLOBALUSERSTATE command on login in addition to the 001 (WELCOME)
-	twirc_capreq(s);
+	libtwirc_capreq(s);
 
 	// Start authentication process (user login)
-	twirc_auth(s);
+	libtwirc_auth(s);
 }
 
 /*
