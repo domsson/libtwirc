@@ -1260,20 +1260,20 @@ int twirc_tick(struct twirc_state *s, int timeout)
 }
 
 /*
- * Runs an endless loop that waits for events timeout milliseconds at a time.
- * Once the connection has been closed or some error has occured that caused 
- * twirc_tick() to return -1, the loop is ended. Returns 0 if the connection 
- * to the IRC server has been lost or 1 if the connection is still up and the
- * loop has ended for some other reason (check the state's error field and 
- * possibly errno for additional details).
+ * Runs an endless loop that waits for and processes IRC events until either
+ * the connection has been closed or some serious error has occured that caused
+ * twirc_tick() to return -1, at which point the loop ends. Returns 0 if the 
+ * connection to the IRC server has been lost or 1 if the connection is still 
+ * up and the loop has ended for some other reason (check the state's error 
+ * field and possibly errno for additional details).
  */
-int twirc_loop(struct twirc_state *state, int timeout)
+int twirc_loop(struct twirc_state *state)
 {
 	// TODO we should probably put some connection time-out code in place
 	// so that we stop running after the connection attempt has been going 
 	// on for so-and-so long. Or shall we leave that up to the user code?
 
-	while(twirc_tick(state, timeout) == 0)
+	while(twirc_tick(state, -1) == 0)
 	{
 		// Nothing to do here, actually. :-)
 	}
