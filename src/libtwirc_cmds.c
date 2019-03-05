@@ -132,8 +132,8 @@ int twirc_cmd_whisper(struct twirc_state *state, const char *nick, const char *m
 {
 	// Usage: "/w <login> <message>"
 	char whisper[TWIRC_MESSAGE_SIZE];
-	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG %s :/w %s %s", 
-			TWIRC_CMD_CHANNEL, nick, msg);
+	snprintf(whisper, TWIRC_MESSAGE_SIZE, "PRIVMSG #%s :/w %s %s", 
+				state->login.nick, nick, msg);
 	return libtwirc_send(state, whisper);
 }
 
@@ -180,8 +180,8 @@ int twirc_cmd_color(struct twirc_state *state, const char *color)
 	// Chocolate, Coral, DodgerBlue, Firebrick, GoldenRod, Green, HotPink, 
 	// OrangeRed, Red, SeaGreen, SpringGreen, YellowGreen.
 	char privmsg[TWIRC_BUFFER_SIZE];
-	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG %s :/color %s", 
-			TWIRC_CMD_CHANNEL, color);
+	snprintf(privmsg, TWIRC_BUFFER_SIZE, "PRIVMSG #%s :/color %s", 
+			state->login.nick, color);
 	return libtwirc_send(state, privmsg);
 }
 

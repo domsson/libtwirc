@@ -103,14 +103,6 @@
 // http://www.networksorcery.com/enp/protocol/irc.htm
 #define TWIRC_NUM_PARAMS 4
 
-// For some reason, when sending whispers, we apparently have to use a channel
-// called #jtv - I don't get it, but it seems to work. The same strategy can be
-// helpful for channel-unspecific commands like /color, which we should be able
-// to use even if we aren't in any channel right now (or don't know which ones
-// we are currently in). Maybe it has something to do with the fact that Twitch
-// was called Justin TV a while back?
-#define TWIRC_CMD_CHANNEL "#jtv"
-
 /*
  * Structures
  */
