@@ -12,7 +12,7 @@ The library is pretty much feature-complete (at least for the initial release) a
 
 # How to use
 
-I have yet to fill the wiki with documentation. Until then, you can check out [twircclient](https://github.com/domsson/twircclient) for some example code that makes use of `libtwirc`, including instructions on how to build. 
+You can have a look at the wiki, but I'm still in the process of filling it. Until that is finished, check out [twircclient](https://github.com/domsson/twircclient) for some example code that makes use of `libtwirc`, including instructions on how to build. 
 
 # Motivation
 
