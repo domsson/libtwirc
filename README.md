@@ -12,7 +12,14 @@ The library is feature-complete for the current (initial) release and seems to w
 
 # How to use
 
-Check out the [wiki](https://github.com/domsson/libtwirc/wiki), which should have all the information to get you started. Also, there is some example code available over at [twircclient](https://github.com/domsson/twircclient). 
+Check out the [wiki](https://github.com/domsson/libtwirc/wiki), which should have all the information to get you started. Also, there is some example code available over at [twircclient](https://github.com/domsson/twircclient). The rough and overly simplified outline of using `libtwirc` looks something like this:
+
+```
+twirc_state_t *s = twirc_init();        // create twirc state
+twirc_connect(HOST, PORT, USER, TOKEN); // connect to Twitch IRC
+twirc_loop();                           // run in a loop until disconnected
+twirc_kill();                           // free resources
+```
 
 # Motivation
 
