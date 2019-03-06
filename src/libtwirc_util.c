@@ -34,6 +34,14 @@ int twirc_is_logged_in(const struct twirc_state *state)
 }
 
 /*
+ * Return the login struct, which contains login and user data.
+ */
+struct twirc_login *twirc_get_login(struct twirc_state *state)
+{
+	return &state->login;
+}
+
+/*
  * Searches the provided array of twirc_tag structs for a tag with the 
  * provided key, then returns a pointer to that tag's value.
  */

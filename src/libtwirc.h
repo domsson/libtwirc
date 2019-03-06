@@ -111,12 +111,10 @@ struct twirc_state;
 struct twirc_event;
 struct twirc_callbacks;
 struct twirc_login;
-struct twirc_user;
 struct twirc_tag;
 
 typedef struct twirc_event twirc_event_t;
 typedef struct twirc_login twirc_login_t;
-typedef struct twirc_user twirc_user_t;
 typedef struct twirc_tag twirc_tag_t;
 typedef struct twirc_state twirc_state_t;
 typedef struct twirc_callbacks twirc_callbacks_t;
@@ -196,15 +194,11 @@ struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
 
 int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass);
 int twirc_disconnect(twirc_state_t *s);
-/*
-int twirc_send(twirc_state_t *s, const char *msg);
-int twirc_recv(twirc_state_t *s, char *buf, size_t len);
-int twirc_auth(twirc_state_t *s);
-int twirc_capreq(twirc_state_t *s);
-*/
 
 void twirc_kill(twirc_state_t *s);
 void twirc_free(twirc_state_t *s);
+
+struct twirc_login *twirc_get_login(twirc_state_t *s);
 
 void  twirc_set_context(twirc_state_t *s, void *ctx);
 void *twirc_get_context(twirc_state_t *s);

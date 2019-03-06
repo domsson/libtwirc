@@ -69,6 +69,12 @@ void libtwirc_on_welcome(struct twirc_state *s, struct twirc_event *evt)
 void libtwirc_on_globaluserstate(struct twirc_state *s, struct twirc_event *evt)
 {
 	s->status |= TWIRC_STATUS_AUTHENTICATED;
+	
+	// Save the display-name and user-id in our login struct
+	char *name = twirc_tag_by_key(evt->tags, "display-name");
+	s->login.name = name == NULL ? NULL : strdup(name);
+	char *id   = twirc_tag_by_key(evt->tags, "user-id");
+	s->login.id   = id   == NULL ? NULL : strdup(id);
 }
 
 /*

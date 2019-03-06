@@ -613,7 +613,7 @@ const char *libtwirc_parse_command(const char *msg, char **cmd)
 	char *next = strstr(msg, " ");
 
 	// Duplicate the string from start to next space or end of msg
-	*cmd = strndup(msg, next == NULL ? strlen(msg) - 2 : next - msg);
+	*cmd = strndup(msg, next == NULL ? strlen(msg) : next - msg);
 	
 	// Return NULL if cmd was the last bit of msg, or a pointer to
 	// the remaining part (the parameters)
@@ -867,7 +867,7 @@ void libtwirc_dispatch_evt(struct twirc_state *state, struct twirc_event *evt)
 		return;
 	}
 	if (strcmp(evt->command, "GLOBALUSERSTATE") == 0)
-	{
+	{ 
 		libtwirc_on_globaluserstate(state, evt);
 		state->cbs.globaluserstate(state, evt);
 		return;
