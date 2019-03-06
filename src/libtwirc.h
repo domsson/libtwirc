@@ -209,7 +209,7 @@ int twirc_last_error(const twirc_state_t *s);
 int twirc_loop(twirc_state_t *s);
 int twirc_tick(twirc_state_t *s, int timeout);
 
-int twirc_cmd_raw(twirc_state_t *s, const char *pass);
+int twirc_cmd_raw(twirc_state_t *s, const char *msg);
 int twirc_cmd_pass(twirc_state_t *s, const char *pass);
 int twirc_cmd_nick(twirc_state_t *s, const char *nick);
 int twirc_cmd_join(twirc_state_t *s, const char *chan);
