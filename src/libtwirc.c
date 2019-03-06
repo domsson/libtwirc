@@ -204,7 +204,6 @@ struct twirc_state* twirc_init()
 
 	// Make sure the structs within state are zero-initialized
 	memset(&state->login, 0, sizeof(struct twirc_login));
-	memset(&state->user, 0, sizeof(struct twirc_user));
 	memset(&state->cbs, 0, sizeof(struct twirc_callbacks));
 
 	// Set all callbacks to the dummy callback
@@ -228,18 +227,14 @@ void libtwirc_free_login(struct twirc_state *s)
 	free(s->login.port);
 	free(s->login.nick);
 	free(s->login.pass);
+	free(s->login.name);
+	free(s->login.id);
 	s->login.host = NULL;
 	s->login.port = NULL;
 	s->login.nick = NULL;
 	s->login.pass = NULL;
-}
-
-void libtwirc_free_user(struct twirc_state *s)
-{
-	free(s->user.name);
-	free(s->user.id);
-	s->user.name = NULL;
-	s->user.id   = NULL;
+	s->login.name = NULL;
+	s->login.id   = NULL;
 }
 
 /*
@@ -250,7 +245,6 @@ void twirc_free(struct twirc_state *s)
 	close(s->epfd);
 	libtwirc_free_callbacks(s);
 	libtwirc_free_login(s);
-	libtwirc_free_user(s);
 	free(s->buffer);
 	free(s);
 	s = NULL;

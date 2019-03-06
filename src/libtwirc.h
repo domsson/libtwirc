@@ -121,6 +121,22 @@ typedef struct twirc_tag twirc_tag_t;
 typedef struct twirc_state twirc_state_t;
 typedef struct twirc_callbacks twirc_callbacks_t;
 
+struct twirc_login
+{
+	char *host;
+	char *port;
+	char *nick;
+	char *pass;
+	char *name;
+	char *id;
+};
+
+struct twirc_tag
+{
+	char *key;
+	char *value;
+};
+
 struct twirc_event
 {
 	// Raw data

@@ -7,27 +7,6 @@
  * Structures
  */
 
-struct twirc_login
-{
-	char *host;
-	char *port;
-	char *nick;
-	char *pass;
-};
-
-struct twirc_user
-{
-	char *name;     // display-name
-	char *id;       // user-id
-	char color[8];  // color in chat
-};
-
-struct twirc_tag
-{
-	char *key;
-	char *value;
-};
-
 // https://pastebin.com/qzzvpuB6
 // TODO come up with a solution of how to hand the relevant meta data 
 //      of certain events to the user (in the callbacks) without adding
@@ -84,7 +63,6 @@ struct twirc_state
 	int socket_fd;                     // TCP socket file descriptor
 	char *buffer;                      // IRC message buffer
 	twirc_login_t login;               // IRC login data 
-	twirc_user_t user;                 // Twitch user details
 	twirc_callbacks_t cbs;             // Event callbacks
 	int epfd;                          // epoll file descriptor
 	int error;                         // Last error that occured
