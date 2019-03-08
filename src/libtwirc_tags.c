@@ -157,17 +157,27 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	return next + 1;
 }
 
+/**
+ * Special value to be returned by twirc_tag_by_key if the
+ * key exists but has no value attached.
+ */
+char *TWIRC_VALUELESS_TAG = "<valueless tag>";
+
 /*
  * Searches the provided array of twirc_tag structs for a tag with the 
- * provided key, then returns a pointer to that tag's value.
+ * provided key.
+ * \return
+ *     - \c NULL if no tag with the given key was found,
+ *     - the value of the tag, if a tag was found and has a value,
+ *     - \c TWIRC_VALUELESS_TAG, if a tag was found, but has no value.
  */
 char *twirc_tag_by_key(struct twirc_tag **tags, const char *key)
 {
-	for (int i = 0; tags[i] != NULL; ++i)
+	for (struct twirc_tag **it = tags; *it != NULL; ++it)
 	{
-		if (strcmp(tags[i]->key, key) == 0)
+		if (strcmp((*it)->key, key) == 0)
 		{
-			return tags[i]->value;
+			return (*it)->value ? (*it)->value : TWIRC_VALUELESS_TAG;
 		}
 	}
 	return NULL;
