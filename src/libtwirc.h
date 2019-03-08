@@ -103,6 +103,15 @@
 // http://www.networksorcery.com/enp/protocol/irc.htm
 #define TWIRC_NUM_PARAMS 4
 
+// If you want to connect to Twitch IRC anonymously, which means you'll be able
+// to read chat but not participate, then you need to use the  username 
+// "justinfan<randomnumber>" for whatever reason.
+#define TWIRC_USER_ANON "justinfan"
+
+// Defines the maximum number of digits that will be used as a suffix for the 
+// anonymous username (TWIRC_USER_ANON)
+#define TWIRC_USER_ANON_MAX_DIGITS 7
+
 /*
  * Structures
  */
@@ -193,6 +202,7 @@ struct twirc_state *twirc_init();
 struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
 
 int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass);
+int twirc_connect_anon(twirc_state_t *s, const char *host, const char *port);
 int twirc_disconnect(twirc_state_t *s);
 
 void twirc_kill(twirc_state_t *s);

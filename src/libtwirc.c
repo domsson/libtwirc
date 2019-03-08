@@ -4,12 +4,27 @@
 #include <unistd.h>     // close()
 #include <string.h>     // strlen(), strerror()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
+#include <time.h>       // time() (as seed for rand())
 #include "tcpsnob.h"
 #include "libtwirc.h"
 #include "libtwirc_internal.h"
 #include "libtwirc_cmds.c"
 #include "libtwirc_util.c"
 #include "libtwirc_evts.c"
+
+int twirc_connect_anon(struct twirc_state *s, const char *host, const char *port)
+{
+	int mod = 10 * TWIRC_USER_ANON_MAX_DIGITS;
+	int r = rand() % mod;
+	size_t anon_len = (strlen(TWIRC_USER_ANON) + TWIRC_USER_ANON_MAX_DIGITS + 1); 
+
+	char *anon = malloc(anon_len * sizeof(char));
+	snprintf(anon, anon_len, "%s%d", TWIRC_USER_ANON, r);
+
+	int res = twirc_connect(s, host, port, anon, "null");
+	free(anon);
+	return res;
+}
 
 /*
  * Initiates a connection with the given server using the given credentials.
@@ -185,6 +200,9 @@ struct twirc_callbacks *twirc_get_callbacks(struct twirc_state *s)
  */
 struct twirc_state* twirc_init()
 {
+	// Seed the random number generator
+	srand(time(NULL));
+
 	// Init state struct
 	struct twirc_state *state = malloc(sizeof(struct twirc_state));
 	if (state == NULL) { return NULL; }
