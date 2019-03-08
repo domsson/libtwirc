@@ -11,6 +11,7 @@
 #include "libtwirc_cmds.c"
 #include "libtwirc_util.c"
 #include "libtwirc_evts.c"
+#include "libtwirc_tags.c"
 
 int twirc_connect_anon(struct twirc_state *s, const char *host, const char *port)
 {
