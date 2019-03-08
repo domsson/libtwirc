@@ -1,87 +1,53 @@
-#include <stdlib.h>     // NULL, malloc, free, realloc
-#include <string.h>     // strcmp, strlen, strdup, strstr
+#include <assert.h>     // assert
+#include <stdlib.h>     // NULL, malloc, free
+#include <string.h>     // strcmp, strlen, strstr, memcpy
 #include "libtwirc.h"
+
+#ifdef TWIRC_TAGS_DEBUG
+#undef TWIRC_TAGS_DEBUG
+#include <stdio.h>
+#define TWIRC_TAGS_DEBUG(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define TWIRC_TAGS_DEBUG(...)
+#endif // TWIRC_TAGS_DEBUG
 
 /*
  * Takes an escaped string (as described in the IRCv3 spec, section tags)
  * and returns a pointer to a malloc'd string that holds the unescaped string.
  * Remember that the returned pointer has to be free'd by the caller!
  */
-char *libtwirc_unescape(const char *str)
+void libtwirc_unescape_tag_value_in_situ(char *escaped)
 {
-	size_t str_len = strlen(str);
-	char *unescaped = malloc((str_len + 1) * sizeof(char));
+	assert(escaped != NULL && "Must provide a message to escape");
+	
+	char *unescaped = escaped;
 
-	int u = 0;
-	for (int i = 0; i < (int) str_len; ++i)
+	for(; *escaped; ++escaped)
 	{
-		if (str[i] == '\\')
+		if (*escaped != '\\')
 		{
-			if (str[i+1] == ':') // "\:" -> ";"
-			{
-				unescaped[u++] = ';';
-				++i;
-				continue;
-			}
-			if (str[i+1] == 's') // "\s" -> " ";
-			{
-				unescaped[u++] = ' ';
-				++i;
-				continue;
-			}
-			if (str[i+1] == '\\') // "\\" -> "\";
-			{
-				unescaped[u++] = '\\';
-				++i;
-				continue;
-			}
-			if (str[i+1] == 'r') // "\r" -> '\r' (CR)
-			{
-				unescaped[u++] = '\r';
-				++i;
-				continue;
-			}
-			if (str[i+1] == 'n') // "\n" -> '\n' (LF)
-			{
-				unescaped[u++] = '\n';
-				++i;
-				continue;
-			}
+			*unescaped++ = *escaped;
 		}
-		unescaped[u++] = str[i];
+		else
+		{
+			switch(escaped[1]) // check next character
+			{
+				case '\\': *unescaped++ = '\\'; break; // "\\" -> "\"
+				case 'r':  *unescaped++ = '\r'; break; // "\r" -> '\r' (CR)
+				case 'n':  *unescaped++ = '\n'; break; // "\n" -> '\n' (LF)
+				case 's':  *unescaped++ = ' ';  break; // "\:" -> ";"
+				case ':':  *unescaped++ = ';';  break; // "\:" -> ";"
+				default: *unescaped++ = '\\'; continue; // unknown escape sequence; take \ verbatim and skip additional increment
+			}
+			++escaped;
+		}
 	}
-	unescaped[u] = '\0';
-	return unescaped;
-}
-
-struct twirc_tag *libtwirc_create_tag(const char *key, const char *val)
-{
-	struct twirc_tag *tag = malloc(sizeof(struct twirc_tag));
-	tag->key   = strdup(key);
-	tag->value = val == NULL ? NULL : libtwirc_unescape(val);
-	return tag;
-}
-
-void libtwirc_free_tag(struct twirc_tag *tag)
-{
-	free(tag->key);
-	free(tag->value);
-	free(tag);
-	tag = NULL;
+	*unescaped = '\0';
 }
 
 void libtwirc_free_tags(struct twirc_tag **tags)
 {
-	if (tags == NULL)
-	{
-		return;
-	}
-	for (int i = 0; tags[i] != NULL; ++i)
-	{
-		libtwirc_free_tag(tags[i]);
-	}
 	free(tags);
-	tags = NULL;
 }
 
 /*
@@ -99,73 +65,93 @@ void libtwirc_free_tags(struct twirc_tag **tags)
  */
 const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_t *len)
 {
+	assert(msg != NULL && "Must provide a message");
+	assert(tags != NULL && "Must provide a storage target for tags");
 	// If msg doesn't start with "@", then there are no tags
 	if (msg[0] != '@')
 	{
-		*len = 0;
+		if (len) { *len = 0; }
 		*tags = NULL;
 		return msg;
 	}
 
 	// Find the next space (the end of the tags string within msg)
-	char *next = strstr(msg, " ");
+	const char * const next = strstr(msg, " ");
 	
-	// Duplicate the string from after the '@' until the next space
-	char *tag_str = strndup(msg + 1, next - (msg + 1));
-
-	// Set the initial number of tags we want to allocate memory for
-	size_t num_tags = TWIRC_NUM_TAGS;
-	
-	// Allocate memory in the provided pointer to ptr-to-array-of-structs
-	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
-
-	char *tag;
-	int i;
-	for (i = 0; (tag = strtok(i == 0 ? tag_str : NULL, ";")) != NULL; ++i)
+	// Count the number of tags
+	size_t num_tags = 1;
+	for(const char *it = msg; it != next; ++it)
 	{
-		// Make sure we have enough space; last element has to be NULL
-		if (i >= num_tags - 1)
+		if (*it == ';') { ++num_tags; }
+	}
+	
+	// Allocate a single buffer for the whole tag structure (less allocations and more cache locality)
+	struct twirc_tag ** const tag_ptr_array = malloc(
+		(num_tags+1) * (sizeof(struct twirc_tag *) + sizeof(struct twirc_tag)) // twitch_tag*[num_tags+1] and twitch_tag[num_tags+1]
+		+ (next - (msg+1)) // strdup of tags (without '@' prefix)
+		+ 1 // '\0' delimiter for tag strdup
+	);
+	struct twirc_tag * const tag_array = (struct twirc_tag*)(tag_ptr_array + num_tags + 1);
+	char * const tag_strdup = (char*)(tag_array + num_tags + 1);
+	char * const tag_strdup_end = tag_strdup + (next - (msg+1));
+	
+	// Create our own little tag string
+	memcpy(tag_strdup, msg+1, (next - msg) - 1);
+	*tag_strdup_end = '\0';
+	
+	TWIRC_TAGS_DEBUG("'%s'\n>'%s'\n", msg, tag_strdup);
+	
+	char *tag_start = tag_strdup;
+	struct twirc_tag **current_tag_ptr = tag_ptr_array;
+	struct twirc_tag *current_tag = tag_array;
+	while(tag_start != tag_strdup_end)
+	{
+		*current_tag_ptr = current_tag;
+		
+		char *next_tag_start = strstr(tag_start, ";");
+		if (next_tag_start == NULL)
 		{
-			size_t add = num_tags * 0.5;
-			num_tags += add;
-			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
+			next_tag_start = tag_strdup_end;
 		}
-
-		char *eq = strstr(tag, "=");
-
-		// It's a key-only tag, like "foo" (never seen that Twitch)
-		// Hence, we didn't find a '=' at all 
-		if (eq == NULL)
-		{
-			(*tags)[i] = libtwirc_create_tag(tag, NULL);
-		}
-		// It's either a key-only tag with a trailing '=' ("foo=")
-		// or a tag with key-value pair, like "foo=bar"
 		else
 		{
-			// Turn the '=' into '\0' to separate key and value
-			eq[0] = '\0'; // Turn the '=' into '\0'
-			// Set val to NULL for key-only tags (to avoid "")
-			char *val = eq[1] == '\0' ? NULL : eq+1;
-			(*tags)[i] = libtwirc_create_tag(tag, val);
+			*next_tag_start = '\0';
+			++next_tag_start;
 		}
-
-		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
+		
+		TWIRC_TAGS_DEBUG("#%d: '%s'\n", current_tag - tag_array, tag_start);
+		
+		char * value_start = strstr(tag_start, "=");
+		if (value_start == NULL)
+		{
+			TWIRC_TAGS_DEBUG("\t '%s' -> (no value)\n", tag_start);
+		}
+		else
+		{
+			*value_start++ = '\0';
+			libtwirc_unescape_tag_value_in_situ(value_start);
+			TWIRC_TAGS_DEBUG("\t '%s' -> '%s'\n", tag_start, value_start);
+		}
+		
+		current_tag->key = tag_start;
+		current_tag->value = value_start;
+		
+		tag_start = next_tag_start;
+		++current_tag_ptr;
+		++current_tag;
 	}
-
-	// Set the number of tags found
-	*len = i;
-
-	free(tag_str);
 	
-	// Trim this down to the exact right size
-	if (i < num_tags - 1)
-	{
-		*tags = realloc(*tags, (i + 1) * sizeof(struct twirc_tag*));
-	}
-
-	// Make sure the last element is a NULL ptr
-	(*tags)[i] = NULL;
+	assert(current_tag_ptr == tag_ptr_array + num_tags && "tag pointer index does not point to expected end tag");
+	assert(current_tag == tag_array + num_tags && "tag index does not point to expected end tag");
+	
+	// Fill tag sentinels
+	*current_tag_ptr = NULL;
+	current_tag->key = NULL;
+	current_tag->value = NULL;
+	
+	// Set output parameters
+	if (len) { *len = num_tags; }
+	*tags = tag_ptr_array;
 
 	// Return a pointer to the remaining part of msg
 	return next + 1;
