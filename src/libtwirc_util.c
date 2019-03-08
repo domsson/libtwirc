@@ -42,22 +42,6 @@ struct twirc_login *twirc_get_login(struct twirc_state *state)
 }
 
 /*
- * Searches the provided array of twirc_tag structs for a tag with the 
- * provided key, then returns a pointer to that tag's value.
- */
-char *twirc_tag_by_key(struct twirc_tag **tags, const char *key)
-{
-	for (int i = 0; tags[i] != NULL; ++i)
-	{
-		if (strcmp(tags[i]->key, key) == 0)
-		{
-			return tags[i]->value;
-		}
-	}
-	return NULL;
-}
-
-/*
  * Return the error code of the last error or -1 if non occurred so far.
  */
 int twirc_last_error(const struct twirc_state *state)
