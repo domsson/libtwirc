@@ -482,10 +482,10 @@ void libtwirc_free_params(char **params)
 	}
 	for (int i = 0; params[i] != NULL; ++i)
 	{
-		fprintf(stderr, "freeing param %d: %s\n", i, params[i]);
 		free(params[i]);
+		params[i] = NULL;
 	}
-	//free(params);
+	free(params);
 }
 
 /*
