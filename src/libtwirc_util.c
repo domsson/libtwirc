@@ -48,3 +48,13 @@ int twirc_last_error(const struct twirc_state *state)
 {
 	return state->error;
 }
+
+void twirc_set_context(struct twirc_state *s, void *ctx)
+{
+	s->context = ctx;
+}
+
+void *twirc_get_context(struct twirc_state *s)
+{
+	return s->context;
+}
