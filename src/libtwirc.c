@@ -482,10 +482,10 @@ void libtwirc_free_params(char **params)
 	}
 	for (int i = 0; params[i] != NULL; ++i)
 	{
+		fprintf(stderr, "freeing param %d: %s\n", i, params[i]);
 		free(params[i]);
 	}
-	free(params);
-	params = NULL;
+	//free(params);
 }
 
 /*
@@ -978,6 +978,8 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outbound)
 
 	// Free event
 	// TODO: make all of this into a function? libtwirc_free_event()
+	libtwirc_free_params(evt.params);
+	evt.params = NULL;
 	libtwirc_free_tags(evt.tags);
 	evt.tags = NULL;
 	free(evt.raw);
@@ -986,7 +988,6 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outbound)
 	free(evt.target);
 	free(evt.command);
 	free(evt.ctcp);
-	libtwirc_free_params(evt.params);
 
 	return err;
 }

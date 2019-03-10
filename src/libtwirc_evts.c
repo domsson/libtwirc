@@ -562,7 +562,7 @@ void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
 {
 	if (evt->num_params > 0)
 	{
-		evt->target  = evt->params[0];
+		evt->target  = strdup(evt->params[0]);
 	}
 	if (evt->num_params > evt->trailing)
 	{
