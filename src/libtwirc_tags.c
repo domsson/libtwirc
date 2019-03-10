@@ -35,7 +35,7 @@ void libtwirc_unescape_tag_value_in_situ(char *escaped)
 				case '\\': *unescaped++ = '\\'; break; // "\\" -> "\"
 				case 'r':  *unescaped++ = '\r'; break; // "\r" -> '\r' (CR)
 				case 'n':  *unescaped++ = '\n'; break; // "\n" -> '\n' (LF)
-				case 's':  *unescaped++ = ' ';  break; // "\:" -> ";"
+				case 's':  *unescaped++ = ' ';  break; // "\s" -> " "
 				case ':':  *unescaped++ = ';';  break; // "\:" -> ";"
 				default: *unescaped++ = '\\'; continue; // unknown escape sequence; take \ verbatim and skip additional increment
 			}
@@ -80,18 +80,19 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	
 	// Count the number of tags
 	size_t num_tags = 1;
-	for(const char *it = msg; it != next; ++it)
+	for (const char *it = msg; it != next; ++it)
 	{
 		if (*it == ';') { ++num_tags; }
 	}
 	
 	// Allocate a single buffer for the whole tag structure (less allocations and more cache locality)
-	struct twirc_tag ** const tag_ptr_array = malloc(
-		(num_tags+1) * (sizeof(struct twirc_tag *) + sizeof(struct twirc_tag)) // twitch_tag*[num_tags+1] and twitch_tag[num_tags+1]
+	twirc_tag_t ** const tag_ptr_array = malloc(
+		(num_tags+1) * (sizeof(twirc_tag_t *) + sizeof(twirc_tag_t)) // twitch_tag*[num_tags+1] and twitch_tag[num_tags+1]
 		+ (next - (msg+1)) // strdup of tags (without '@' prefix)
 		+ 1 // '\0' delimiter for tag strdup
 	);
-	struct twirc_tag * const tag_array = (struct twirc_tag*)(tag_ptr_array + num_tags + 1);
+
+	twirc_tag_t * const tag_array = (twirc_tag_t*)(tag_ptr_array + num_tags + 1);
 	char * const tag_strdup = (char*)(tag_array + num_tags + 1);
 	char * const tag_strdup_end = tag_strdup + (next - (msg+1));
 	
