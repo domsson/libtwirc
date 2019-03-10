@@ -213,6 +213,7 @@ struct twirc_login *twirc_get_login(twirc_state_t *s);
 void  twirc_set_context(twirc_state_t *s, void *ctx);
 void *twirc_get_context(twirc_state_t *s);
 
+extern char *TWIRC_VALUELESS_TAG;
 char *twirc_tag_by_key(twirc_tag_t **tags, const char *key);
 int twirc_last_error(const twirc_state_t *s);
 
