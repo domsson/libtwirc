@@ -394,16 +394,18 @@ size_t libtwirc_shift_token(char *dest, char *src, const char *sep)
  * Takes an escaped string (as described in the IRCv3 spec, section tags)
  * and returns a pointer to a malloc'd string that holds the unescaped string.
  * Remember that the returned pointer has to be free'd by the caller!
+ * TODO: THIS CAN SEGFAULT! FIX IT!
  */
 char *libtwirc_unescape(const char *str)
 {
 	size_t str_len = strlen(str);
 	char *unescaped = malloc((str_len + 1) * sizeof(char));
+	if (unescaped == NULL) { return NULL; }
 
 	int u = 0;
 	for (int i = 0; i < (int) str_len; ++i)
 	{
-		if (str[i] == '\\')
+		if (str[i] == '\\')  
 		{
 			if (str[i+1] == ':') // "\:" -> ";"
 			{
@@ -445,7 +447,8 @@ char *libtwirc_unescape(const char *str)
 struct twirc_tag *libtwirc_create_tag(const char *key, const char *val)
 {
 	struct twirc_tag *tag = malloc(sizeof(struct twirc_tag));
-	tag->key   = strdup(key);
+	if (tag == NULL) { return NULL; }
+	tag->key   = key == NULL ? NULL : strdup(key);
 	tag->value = val == NULL ? NULL : libtwirc_unescape(val);
 	return tag;
 }
@@ -455,7 +458,6 @@ void libtwirc_free_tag(struct twirc_tag *tag)
 	free(tag->key);
 	free(tag->value);
 	free(tag);
-	tag = NULL;
 }
 
 void libtwirc_free_tags(struct twirc_tag **tags)
@@ -467,9 +469,9 @@ void libtwirc_free_tags(struct twirc_tag **tags)
 	for (int i = 0; tags[i] != NULL; ++i)
 	{
 		libtwirc_free_tag(tags[i]);
+		tags[i] = NULL;
 	}
 	free(tags);
-	tags = NULL;
 }
 
 void libtwirc_free_params(char **params)
@@ -548,14 +550,14 @@ const char *libtwirc_parse_tags(const char *msg, struct twirc_tag ***tags, size_
 	// Allocate memory in the provided pointer to ptr-to-array-of-structs
 	*tags = malloc(num_tags * sizeof(struct twirc_tag*));
 
-	char *tag;
+	char *tag = NULL;
 	int i;
 	for (i = 0; (tag = strtok(i == 0 ? tag_str : NULL, ";")) != NULL; ++i)
 	{
 		// Make sure we have enough space; last element has to be NULL
 		if (i >= num_tags - 1)
 		{
-			size_t add = num_tags * 0.5;
+			size_t add = (size_t) (num_tags / 2);
 			num_tags += add;
 			*tags = realloc(*tags, num_tags * sizeof(struct twirc_tag*));
 		}
@@ -977,6 +979,7 @@ int libtwirc_process_msg(struct twirc_state *s, const char *msg, int outbound)
 	// Free event
 	// TODO: make all of this into a function? libtwirc_free_event()
 	libtwirc_free_tags(evt.tags);
+	evt.tags = NULL;
 	free(evt.raw);
 	free(evt.prefix);
 	free(evt.origin);
