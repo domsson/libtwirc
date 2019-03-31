@@ -19,6 +19,7 @@ int twirc_connect_anon(struct twirc_state *s, const char *host, const char *port
 	size_t anon_len = (strlen(TWIRC_USER_ANON) + TWIRC_USER_ANON_MAX_DIGITS + 1); 
 
 	char *anon = malloc(anon_len * sizeof(char));
+	if (anon == NULL) { return -1; }
 	snprintf(anon, anon_len, "%s%d", TWIRC_USER_ANON, r);
 
 	int res = twirc_connect(s, host, port, anon, "null");
