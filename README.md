@@ -41,4 +41,5 @@ If you want to contribute code or are, for whatever reason, otherwise interested
 - I only use `typedef` sparingly
 - I add `_t` to typedef'd variable names
 - I try to keep lines to 80 chars if possible
-- I rather exceed 80 chars than wrap a line 
+- I rather exceed 80 chars a bit than wrap a line 
+- I ratgher wrap a line than exceed 80 chars by a lot
