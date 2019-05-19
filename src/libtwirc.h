@@ -5,11 +5,7 @@
 #define TWIRC_NAME "libtwirc"
 #define TWIRC_VER_MAJOR 0
 #define TWIRC_VER_MINOR 1
-#ifdef BUILD
-	#define TWIRC_VER_BUILD BUILD
-#else
-	#define TWIRC_VER_BUILD 0.0
-#endif
+#define TWIRC_VER_BUILD 0.0
 
 // Convenience
 #define TWIRC_IPV4 TCPSNOB_IPV4
@@ -72,7 +68,10 @@
 // this could be PING or PRIVMSG or one of many possible numerical codes. 
 // The page below lists known commands, the longest seems to be UNLOADMODULE or
 // RELOADMODULE, both have a length of 12. Hence, a size of 16 seems enough.
-#define TWIRC_COMMAND_SIZE 16
+// On the other hand, Twitch has custom commands, the longest of which is, at 
+// the time of writing, GLOBALUSERSTATE, with a length of 16. Taking the null
+// terminator into account, it seems safer to go with a generous 32 bytes here.
+#define TWIRC_COMMAND_SIZE 32
 
 // Total size for the PONG command, including its optional parameter.
 // Currently, the command is always "PONG :tmi.twitch.tv", but it might change
@@ -104,8 +103,8 @@
 #define TWIRC_NUM_PARAMS 4
 
 // If you want to connect to Twitch IRC anonymously, which means you'll be able
-// to read chat but not participate, then you need to use the  username 
-// "justinfan<randomnumber>" for whatever reason.
+// to read chat but not participate, then you need to use the special username 
+// "justinfan<randomnumber>", which seems to be a relic from the JustinTV days.
 #define TWIRC_USER_ANON "justinfan"
 
 // Defines the maximum number of digits that will be used as a suffix for the 
@@ -164,7 +163,7 @@ struct twirc_event
 	char *ctcp;                        // CTCP commmand, if any
 };
 
-typedef void (*twirc_callback)(struct twirc_state *s, struct twirc_event *e);
+typedef void (*twirc_callback)(twirc_state_t *s, twirc_event_t *e);
 
 struct twirc_callbacks
 {
@@ -198,27 +197,39 @@ struct twirc_callbacks
  * Public functions
  */
 
-struct twirc_state *twirc_init();
-struct twirc_callbacks *twirc_get_callbacks(twirc_state_t *s);
+// Initialization
+twirc_state_t     *twirc_init();
+twirc_callbacks_t *twirc_get_callbacks(twirc_state_t *s);
 
+// Connecting and disconnecting
 int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass);
 int twirc_connect_anon(twirc_state_t *s, const char *host, const char *port);
 int twirc_disconnect(twirc_state_t *s);
 
-void twirc_kill(twirc_state_t *s);
-void twirc_free(twirc_state_t *s);
-
-struct twirc_login *twirc_get_login(twirc_state_t *s);
-
-void  twirc_set_context(twirc_state_t *s, void *ctx);
-void *twirc_get_context(twirc_state_t *s);
-
-char *twirc_tag_by_key(twirc_tag_t **tags, const char *key);
-int twirc_last_error(const twirc_state_t *s);
-
+// Main flow control
 int twirc_loop(twirc_state_t *s);
 int twirc_tick(twirc_state_t *s, int timeout);
 
+// Clean-up and shut-down
+void twirc_kill(twirc_state_t *s);
+void twirc_free(twirc_state_t *s);
+
+// Retrieval of data from the twirc state
+twirc_login_t *twirc_get_login(twirc_state_t *s);
+twirc_tag_t   *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key);
+int            twirc_get_last_error(const twirc_state_t *s);
+
+// Twitc state status inforamtion
+int twirc_is_connecting(const twirc_state_t *s);
+int twirc_is_logging_in(const twirc_state_t *s);
+int twirc_is_connected(const twirc_state_t *s);
+int twirc_is_logged_in(const twirc_state_t *s);
+
+// Custom user-data
+void  twirc_set_context(twirc_state_t *s, void *ctx);
+void *twirc_get_context(twirc_state_t *s);
+
+// Twitch IRC commands
 int twirc_cmd_raw(twirc_state_t *s, const char *msg);
 int twirc_cmd_pass(twirc_state_t *s, const char *pass);
 int twirc_cmd_nick(twirc_state_t *s, const char *nick);
@@ -260,10 +271,5 @@ int twirc_cmd_unmod(twirc_state_t *s, const char *chan, const char *nick);
 int twirc_cmd_vip(twirc_state_t *s, const char *chan, const char *nick);
 int twirc_cmd_unvip(twirc_state_t *s, const char *chan, const char *nick);
 int twirc_cmd_marker(twirc_state_t *s, const char *chan, const char *comment);
-
-int twirc_is_connecting(const twirc_state_t *s);
-int twirc_is_logging_in(const twirc_state_t *s);
-int twirc_is_connected(const twirc_state_t *s);
-int twirc_is_logged_in(const twirc_state_t *s);
 
 #endif

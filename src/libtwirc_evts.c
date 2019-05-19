@@ -11,7 +11,7 @@
  * Maybe `static inline` enables the compiler to optimize the overhead.
  */
 static inline
-void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_null(twirc_state_t *s, twirc_event_t *evt)
 {
 	// Nothing in here - that's on purpose
 }
@@ -23,7 +23,7 @@ void libtwirc_on_null(struct twirc_state *s, struct twirc_event *evt)
  * The raw message, as well as the raw parts ("prefix", "command", etc) will
  * all be available, however.
  */
-void libtwirc_on_outbound(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_outbound(twirc_state_t *s, twirc_event_t *evt)
 {
 	// Nothing, otherwise we'd have to have a ton of if and else
 }
@@ -34,7 +34,7 @@ void libtwirc_on_outbound(struct twirc_state *s, struct twirc_event *evt)
  * < WHO #<channel>
  * > :tmi.twitch.tv 421 <user> WHO :Unknown command
  */
-void libtwirc_on_invalidcmd(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_invalidcmd(twirc_state_t *s, twirc_event_t *evt)
 {
 	// Don't think we have to do anything here, honestly
 }
@@ -43,7 +43,7 @@ void libtwirc_on_invalidcmd(struct twirc_state *s, struct twirc_event *evt)
  * Handler for the "001" command (RPL_WELCOME), which the Twitch servers send
  * on successful login, even when no capabilities have been requested.
  */
-void libtwirc_on_welcome(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_welcome(twirc_state_t *s, twirc_event_t *evt)
 {
 	s->status |= TWIRC_STATUS_AUTHENTICATED;
 }
@@ -66,21 +66,21 @@ void libtwirc_on_welcome(struct twirc_state *s, struct twirc_event *evt)
  *               gets a subset of emoticons.
  * user-id:      The user’s ID.
  */
-void libtwirc_on_globaluserstate(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_globaluserstate(twirc_state_t *s, twirc_event_t *evt)
 {
 	s->status |= TWIRC_STATUS_AUTHENTICATED;
 	
 	// Save the display-name and user-id in our login struct
-	char *name = twirc_tag_by_key(evt->tags, "display-name");
-	s->login.name = name == NULL ? NULL : strdup(name);
-	char *id   = twirc_tag_by_key(evt->tags, "user-id");
-	s->login.id   = id   == NULL ? NULL : strdup(id);
+	twirc_tag_t *name = twirc_get_tag_by_key(evt->tags, "display-name");
+	twirc_tag_t *id   = twirc_get_tag_by_key(evt->tags, "user-id");
+	s->login.name = name ? strdup(name->value) : NULL;
+	s->login.id   = id   ? strdup(id->value)   : NULL;
 }
 
 /*
  * On "CAP * ACK" command, which confirms a requested capability.
  */
-void libtwirc_on_capack(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_capack(twirc_state_t *s, twirc_event_t *evt)
 {
 	// TODO Maybe we should keep track of what capabilities have been 
 	// acknowledged by the server, so the user can query it if need be?
@@ -89,7 +89,7 @@ void libtwirc_on_capack(struct twirc_state *s, struct twirc_event *evt)
 /*
  * Responds to incoming PING commands with a corresponding PONG.
  */
-void libtwirc_on_ping(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_ping(twirc_state_t *s, twirc_event_t *evt)
 {
 	twirc_cmd_pong(s, evt->num_params ? evt->params[0] : NULL);
 }
@@ -99,7 +99,7 @@ void libtwirc_on_ping(struct twirc_state *s, struct twirc_event *evt)
  * 
  * > :<user>!<user>@<user>.tmi.twitch.tv JOIN #<channel>
  */
-void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_join(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -134,7 +134,7 @@ void libtwirc_on_join(struct twirc_state *s, struct twirc_event *evt)
  * > :jtv MODE #esl_csgo +o ravager01
  * > :jtv MODE #esl_csgo +o doctorwigglez
  */
-void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_mode(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -151,7 +151,7 @@ void libtwirc_on_mode(struct twirc_state *s, struct twirc_event *evt)
  * > :<user>.tmi.twitch.tv 353 <user> = #<channel> :<user4> <user5> ... <userN>
  * > :<user>.tmi.twitch.tv 366 <user> #<channel> :End of /NAMES list
  */
-void libtwirc_on_names(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_names(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (strcmp(evt->command, "353") == 0 && evt->num_params > 2)
 	{
@@ -170,7 +170,7 @@ void libtwirc_on_names(struct twirc_state *s, struct twirc_event *evt)
  *
  * > :<user>!<user>@<user>.tmi.twitch.tv PART #<channel>
  */
-void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_part(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -199,7 +199,7 @@ void libtwirc_on_part(struct twirc_state *s, struct twirc_event *evt)
  * design as "users could scrape it, and use it to target the mods that timed 
  * them out or banned them." 
  */
-void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_clearchat(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -218,7 +218,7 @@ void libtwirc_on_clearchat(struct twirc_state *s, struct twirc_event *evt)
  * message:       The message.
  * target-msg-id: UUID of the message.
  */
-void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_clearmsg(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -254,7 +254,7 @@ void libtwirc_on_clearmsg(struct twirc_state *s, struct twirc_event *evt)
  * > @msg-id=host_off :tmi.twitch.tv NOTICE #domsson :Exited host mode.
  *
  */
-void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_hosttarget(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -298,7 +298,7 @@ void libtwirc_on_hosttarget(struct twirc_state *s, struct twirc_event *evt)
  *    :tmi.twitch.tv NOTICE #domsson 
  *    :joshachu has gone offline. Exiting host mode.
  */
-void libtwirc_on_notice(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_notice(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -313,7 +313,7 @@ void libtwirc_on_notice(struct twirc_state *s, struct twirc_event *evt)
 /*
  * CTCP ACTION
  */
-void libtwirc_on_action(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_action(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -334,7 +334,7 @@ void libtwirc_on_action(struct twirc_state *s, struct twirc_event *evt)
  * case, reconnect and rejoin channels that were on the connection, as you 
  * would normally.
  */
-void libtwirc_on_reconnect(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_reconnect(twirc_state_t *s, twirc_event_t *evt)
 {
 	// Probably nothing to do here
 }
@@ -381,7 +381,7 @@ void libtwirc_on_reconnect(struct twirc_state *s, struct twirc_event *evt)
  * tmi-sent-ts:  Timestamp when the server received the message.
  * user-id:      The user’s ID.
  */
-void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_privmsg(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -418,7 +418,7 @@ void libtwirc_on_privmsg(struct twirc_state *s, struct twirc_event *evt)
  *                   moderators can chat. Valid values: 0 (disabled) or 1 
  *                   (enabled).
  */
-void libtwirc_on_roomstate(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_roomstate(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -508,7 +508,7 @@ void libtwirc_on_roomstate(struct twirc_state *s, struct twirc_event *evt)
  * tmi-sent-ts:                      Timestamp when the server received the message.
  * user-id:                          The user’s ID.
  */
-void libtwirc_on_usernotice(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_usernotice(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -540,7 +540,7 @@ void libtwirc_on_usernotice(struct twirc_state *s, struct twirc_event *evt)
  *               emoticon images.
  * mod:          1 if the user has a moderator badge; otherwise, 0.
  */
-void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_userstate(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -558,7 +558,7 @@ void libtwirc_on_userstate(struct twirc_state *s, struct twirc_event *evt)
  *  thread-id=65269353_274538602;turbo=0;user-id=65269353;user-type= 
  *   :domsson!domsson@domsson.tmi.twitch.tv WHISPER kaulmate :hey kaul!
  */
-void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_whisper(twirc_state_t *s, twirc_event_t *evt)
 {
 	if (evt->num_params > 0)
 	{
@@ -573,7 +573,7 @@ void libtwirc_on_whisper(struct twirc_state *s, struct twirc_event *evt)
 /*
  * Handles all events that do not (yet) have a dedicated event handler.
  */
-void libtwirc_on_other(struct twirc_state *s, struct twirc_event *evt)
+void libtwirc_on_other(twirc_state_t *s, twirc_event_t *evt)
 {
 	// As we don't know what kind of event this is, we do nothing here
 }
@@ -583,7 +583,7 @@ void libtwirc_on_other(struct twirc_state *s, struct twirc_event *evt)
  * detects that a connection to the IRC server has been established. Hence,
  * there is no twirc_event struct for this callback.
  */
-void libtwirc_on_connect(struct twirc_state *s)
+void libtwirc_on_connect(twirc_state_t *s)
 {
 	// Set status to connected (discarding all other flags)
 	s->status = TWIRC_STATUS_CONNECTED;
@@ -601,7 +601,7 @@ void libtwirc_on_connect(struct twirc_state *s)
  * detects that the connection to the IRC server has been lost. Hence, there
  * is no twirc_event struct for this callback.
  */
-void libtwirc_on_disconnect(struct twirc_state *s)
+void libtwirc_on_disconnect(twirc_state_t *s)
 {
 	// Set status to disconnected (discarding all other flags)
 	s->status = TWIRC_STATUS_DISCONNECTED;
