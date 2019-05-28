@@ -470,12 +470,33 @@ char *libtwirc_unescape(const char *str)
 	return unescaped;
 }
 
+/*
+ * Dynamically allocates a twirc_tag_t from the given key and value strings.
+ * Returns NULL if memory allocation failed or the given key was NULL or an
+ * empty string, otherwise a pointer to the created tag. If the given value 
+ * was NULL, it will be set to an empty string. Both key and value are also 
+ * dynamically allocated and need to be free'd by the caller at some point.
+ */
 twirc_tag_t *libtwirc_create_tag(const char *key, const char *val)
 {
+	// Key can't be NULL or empty
+	if (key == NULL || strlen(key) == 0)
+	{
+		return NULL;
+	}
+	
+	// Allocate memory
 	twirc_tag_t *tag = malloc(sizeof(twirc_tag_t));
-	if (tag == NULL) { return NULL; }
-	tag->key   = key == NULL ? NULL : strdup(key);
-	tag->value = val == NULL ? NULL : libtwirc_unescape(val);
+
+	// Check if allocation worked
+	if (tag == NULL) {
+		return NULL;
+	}
+
+	// Set key and value; if value was NULL, set it to empty string
+	tag->key   = strdup(key);
+	tag->value = val == NULL ? strdup("") : libtwirc_unescape(val);
+
 	return tag;
 }
 
@@ -544,8 +565,8 @@ char *libtwirc_parse_nick(const char *prefix)
  * Extracts tags from the beginning of an IRC message, if any, and returns them
  * as a pointer to a dynamically allocated array of twirc_tag structs, where 
  * each struct contains two members, key and value, representing the key and 
- * value of a tag, respectively. The value member of a tag can be NULL for tags 
- * that are key-only. The last element of the array will be a NULL pointer, so 
+ * value of a tag, respectively. The value member of a tag can be empty string 
+ * for key-only tags. The last element of the array will be a NULL pointer, so 
  * you can loop over all tags until you hit NULL. The number of extracted tags
  * is returned in len. If no tags have been found at the beginning of msg, tags
  * will be NULL, len will be 0 and this function will return a pointer to msg.
@@ -589,10 +610,12 @@ const char *libtwirc_parse_tags(const char *msg, twirc_tag_t ***tags, size_t *le
 
 		char *eq = strstr(tag, "=");
 
-		// It's a key-only tag, like "foo" (never seen that Twitch)
+		// It's a key-only tag, like "foo" (never seen that on Twitch)
 		// Hence, we didn't find a '=' at all 
 		if (eq == NULL)
 		{
+			// TODO we should check for libtwirc_create_tag()
+			// 	returning NULL and act accordingly
 			(*tags)[i] = libtwirc_create_tag(tag, NULL);
 		}
 		// It's either a key-only tag with a trailing '=' ("foo=")
@@ -601,9 +624,10 @@ const char *libtwirc_parse_tags(const char *msg, twirc_tag_t ***tags, size_t *le
 		{
 			// Turn the '=' into '\0' to separate key and value
 			eq[0] = '\0'; // Turn the '=' into '\0'
-			// Set val to NULL for key-only tags (to avoid "")
-			char *val = eq[1] == '\0' ? NULL : eq+1;
-			(*tags)[i] = libtwirc_create_tag(tag, val);
+			
+			// TODO we should check for libtwirc_create_tag()
+			// 	returning NULL and act accordingly
+			(*tags)[i] = libtwirc_create_tag(tag, eq+1);
 		}
 
 		//fprintf(stderr, ">>> TAG %d: %s = %s\n", i, (*tags)[i]->key, (*tags)[i]->value);
