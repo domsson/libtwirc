@@ -8,7 +8,7 @@ Part of the development happens live on Twitch: [twitch.tv/domsson](https://twit
 
 # Status
 
-The library is feature-complete for the current (initial) release and seems to work well. However, I have not unit-tested it yet, so there most likely still bugs lurking. I would love some feedback from actual users, so why not give it a try?
+The library is feature-complete for the current (initial) release and seems to work well. However, I have not unit-tested it yet, so there are most likely some bugs lurking still. I would love some feedback from actual users, so why not give it a try?
 
 # How to use
 
@@ -41,4 +41,5 @@ If you want to contribute code or are, for whatever reason, otherwise interested
 - I only use `typedef` sparingly
 - I add `_t` to typedef'd variable names
 - I try to keep lines to 80 chars if possible
-- I rather exceed 80 chars than wrap a line 
+- I rather exceed 80 chars a bit than wrap a line 
+- I rather wrap a line than exceed 80 chars by a lot
