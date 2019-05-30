@@ -217,6 +217,7 @@ void twirc_free(twirc_state_t *s);
 // Retrieval of data from the twirc state
 twirc_login_t *twirc_get_login(twirc_state_t *s);
 twirc_tag_t   *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key);
+char const    *twirc_get_tag_value(twirc_tag_t **tags, const char *key);
 int            twirc_get_last_error(const twirc_state_t *s);
 
 // Twitc state status inforamtion
