@@ -5,7 +5,7 @@
 #define TWIRC_NAME "libtwirc"
 #define TWIRC_VER_MAJOR 0
 #define TWIRC_VER_MINOR 1
-#define TWIRC_VER_BUILD 0.0
+#define TWIRC_VER_BUILD 1
 
 // Convenience
 #define TWIRC_IPV4 TCPSNOB_IPV4
