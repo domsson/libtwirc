@@ -5,6 +5,7 @@
 #include <string.h>     // strlen(), strerror()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include <time.h>       // time() (as seed for rand())
+#include <signal.h>	// sigset_t et al
 #include "tcpsnob.h"
 #include "libtwirc.h"
 #include "libtwirc_internal.h"
@@ -1280,7 +1281,25 @@ int libtwirc_recv(twirc_state_t *s, char *buf, size_t len)
 int twirc_tick(twirc_state_t *s, int timeout)
 {
 	struct epoll_event epev;
-	int num_events = epoll_wait(s->epfd, &epev, 1, timeout);
+	
+	// epoll_wait()/epoll_pwait() will return -1 if a signal is caught.
+	// User code might catch "harmless" signals, like SIGWINCH, that are
+	// ignored by default. This would then cause epoll_wait() to return
+	// with -1, hence our main loop to come to a halt. This is not what
+	// a user would expect; we should only come to a halt on "serious"
+	// signals that would cause program termination/halt by default.
+	// In order to achieve this, we tell epoll_pwait() to block all of
+	// the signals that are ignored by default. For a list of signals:
+	// https://en.wikipedia.org/wiki/Signal_(IPC)
+	
+	sigset_t sigset;
+	sigemptyset(&sigset);
+	sigaddset(&sigset, SIGCHLD);  // default: ignore
+	sigaddset(&sigset, SIGCONT);  // default: continue execution
+	sigaddset(&sigset, SIGURG);   // default: ignore
+	sigaddset(&sigset, SIGWINCH); // default: ignore
+
+	int num_events = epoll_pwait(s->epfd, &epev, 1, timeout, &sigset);
 
 	// An error has occured
 	if (num_events == -1)
@@ -1303,32 +1322,10 @@ int twirc_tick(twirc_state_t *s, int timeout)
 		// be down, then we'll set off the disconnect event handlers.
 		// For this, we'll use tcpsnob_status().
 
-		// TODO
-		// Even irrelevant/harmless signals like SIGWINCH will lead to 
-		// our implementation to return -1, which seems very "fragile",
-		// or too sensitive, so to speak. We need to investiage further
-		// what's the best approach here. This seesm to give pointers:
-		// https://stackoverflow.com/questions/43212106/handle-signals-with-epoll-wait
-		//
-		// Also look at the epoll man page and see epoll_pwait(), 
-		// especially the code example given. Should we check errno for
-		// EINTR ("The call was interrupted by a signal handler") and
-		// simply ignore it? Or give a better error code to the user,
-		// like "TWIRC_ERR_EPOLL_SIG"?
-		//
-		// I'm thinking the best might be to use pthread_sigmask() or
-		// sigprocmask() before/after each call to epoll_wait() to set
-		// the signal mask so that we block those signals that would 
-		// normally be blocked anyway (see link below)? Almost all the
-		// signals, apart from the ones that are usually ignored, lead
-		// to termination of the process anyway; for those, it seems a
-		// good idea to actually end the loop/tick.
-		//
-		// Also, check Wiki for all possible signals:
-		// https://en.wikipedia.org/wiki/Signal_(IPC)
-
-		// Set the error accordingly
-		s->error = TWIRC_ERR_EPOLL_WAIT;
+		// Set the error accordingly:
+		//  - TWIRC_ERR_EPOLL_SIG  if epoll_pwait() caught a signal
+		//  - TWIRC_ERR_EPOLL_WAIT for any other error in epoll_wait()
+		s->error = errno == EINTR ? TWIRC_ERR_EPOLL_SIG : TWIRC_ERR_EPOLL_WAIT;
 		
 		// Were we connected previously but now seem to be disconnected?
 		if (twirc_is_connected(s) && tcpsnob_status(s->socket_fd) == -1)

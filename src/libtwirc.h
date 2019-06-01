@@ -19,6 +19,7 @@
 #define TWIRC_STATUS_AUTHENTICATED   8
 
 // Errors
+#define TWIRC_ERR_NONE               0
 #define TWIRC_ERR_OUT_OF_MEMORY     -2
 #define TWIRC_ERR_SOCKET_CREATE     -3
 #define TWIRC_ERR_SOCKET_CONNECT    -4
@@ -27,10 +28,11 @@
 #define TWIRC_ERR_SOCKET_CLOSE      -7
 #define TWIRC_ERR_EPOLL_CREATE      -8
 #define TWIRC_ERR_EPOLL_CTL         -9
-#define TWIRC_ERR_EPOLL_WAIT       -10
+#define TWIRC_ERR_EPOLL_WAIT       -10 // epoll_pwait() error
 #define TWIRC_ERR_CONN_CLOSED      -11 // Connection lost: peer closed it
 #define TWIRC_ERR_CONN_HANGUP      -12 // Connection lost: unexpectedly
 #define TWIRC_ERR_CONN_SOCKET      -13 // Connection lost: socket error
+#define TWIRC_ERR_EPOLL_SIG        -14 // epoll_pwait() caught a signal
 
 // Maybe we should do this, too:
 // https://github.com/shaoner/libircclient/blob/master/include/libirc_rfcnumeric.h
@@ -216,7 +218,8 @@ void twirc_free(twirc_state_t *s);
 
 // Retrieval of data from the twirc state
 twirc_login_t *twirc_get_login(twirc_state_t *s);
-twirc_tag_t   *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key);
+twirc_tag_t   *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key); // deprecated
+twirc_tag_t   *twirc_get_tag(twirc_tag_t **tags, const char *key);
 char const    *twirc_get_tag_value(twirc_tag_t **tags, const char *key);
 int            twirc_get_last_error(const twirc_state_t *s);
 

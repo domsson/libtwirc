@@ -46,7 +46,7 @@ twirc_login_t *twirc_get_login(twirc_state_t *state)
  * provided key, then returns a pointer to that tag. If no tag with the
  * given key was found, NULL will be returned.
  */
-twirc_tag_t *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key)
+twirc_tag_t *twirc_get_tag(twirc_tag_t **tags, const char *key)
 {
 	for (int i = 0; tags[i] != NULL; ++i)
 	{
@@ -56,6 +56,14 @@ twirc_tag_t *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key)
 		}
 	}
 	return NULL;
+}
+
+/*
+ * Deprecated alias of twirc_get_tag(), use that instead.
+ */
+twirc_tag_t *twirc_get_tag_by_key(twirc_tag_t **tags, const char *key)
+{
+	return twirc_get_tag(tags, key);
 }
 
 /*
