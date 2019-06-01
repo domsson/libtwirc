@@ -1303,6 +1303,30 @@ int twirc_tick(twirc_state_t *s, int timeout)
 		// be down, then we'll set off the disconnect event handlers.
 		// For this, we'll use tcpsnob_status().
 
+		// TODO
+		// Even irrelevant/harmless signals like SIGWINCH will lead to 
+		// our implementation to return -1, which seems very "fragile",
+		// or too sensitive, so to speak. We need to investiage further
+		// what's the best approach here. This seesm to give pointers:
+		// https://stackoverflow.com/questions/43212106/handle-signals-with-epoll-wait
+		//
+		// Also look at the epoll man page and see epoll_pwait(), 
+		// especially the code example given. Should we check errno for
+		// EINTR ("The call was interrupted by a signal handler") and
+		// simply ignore it? Or give a better error code to the user,
+		// like "TWIRC_ERR_EPOLL_SIG"?
+		//
+		// I'm thinking the best might be to use pthread_sigmask() or
+		// sigprocmask() before/after each call to epoll_wait() to set
+		// the signal mask so that we block those signals that would 
+		// normally be blocked anyway (see link below)? Almost all the
+		// signals, apart from the ones that are usually ignored, lead
+		// to termination of the process anyway; for those, it seems a
+		// good idea to actually end the loop/tick.
+		//
+		// Also, check Wiki for all possible signals:
+		// https://en.wikipedia.org/wiki/Signal_(IPC)
+
 		// Set the error accordingly
 		s->error = TWIRC_ERR_EPOLL_WAIT;
 		
