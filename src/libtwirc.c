@@ -1360,7 +1360,7 @@ int twirc_loop(twirc_state_t *s)
 	// so that we stop running after the connection attempt has been going 
 	// on for so-and-so long. Or shall we leave that up to the user code?
 
-	while(twirc_tick(s, -1) == 0)
+	while (twirc_tick(s, -1) == 0)
 	{
 		// Nothing to do here, actually. :-)
 	}
