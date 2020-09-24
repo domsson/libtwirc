@@ -8,8 +8,8 @@
 #define TWIRC_VER_BUILD 1
 
 // Convenience
-#define TWIRC_IPV4 TCPSNOB_IPV4
-#define TWIRC_IPV6 TCPSNOB_IPV6
+#define TWIRC_IPV4 TCPSOCK_IPV4
+#define TWIRC_IPV6 TCPSOCK_IPV6
 
 // State (bitfield)
 #define TWIRC_STATUS_DISCONNECTED    0

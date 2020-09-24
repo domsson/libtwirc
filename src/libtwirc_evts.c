@@ -611,6 +611,6 @@ void libtwirc_on_disconnect(twirc_state_t *s)
 	// the error via s->error for two reasons: first, we kind of expect 
 	// this to fail; second: we don't want to override more meaningful 
 	// errors that might have occurred before 
-	tcpsnob_close(s->socket_fd);
+	tcpsock_close(s->socket_fd);
 }
 

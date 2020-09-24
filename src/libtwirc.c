@@ -1,3 +1,5 @@
+#define TCPSOCK_IMPLEMENTATION
+
 #include <stdio.h>      // NULL, fprintf(), perror()
 #include <stdlib.h>     // NULL, EXIT_FAILURE, EXIT_SUCCESS
 #include <errno.h>      // errno
@@ -6,7 +8,7 @@
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include <time.h>       // time() (as seed for rand())
 #include <signal.h>	// sigset_t et al
-#include "tcpsnob.h"
+#include "tcpsock.h"
 #include "libtwirc.h"
 #include "libtwirc_internal.h"
 #include "libtwirc_cmds.c"
@@ -59,7 +61,7 @@ int twirc_connect_anon(twirc_state_t *s, const char *host, const char *port)
 int twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass)
 {
 	// Create socket
-	s->socket_fd = tcpsnob_create(s->ip_type);
+	s->socket_fd = tcpsock_create(s->ip_type, TCPSOCK_NONBLOCK);
 	if (s->socket_fd < 0)
 	{
 		s->error = TWIRC_ERR_SOCKET_CREATE;
@@ -94,7 +96,7 @@ int twirc_connect(twirc_state_t *s, const char *host, const char *port, const ch
 	s->login.pass = strdup(pass);
 
 	// Connect the socket (and handle a possible connection error)
-	if (tcpsnob_connect(s->socket_fd, s->ip_type, host, port) == -1)
+	if (tcpsock_connect(s->socket_fd, s->ip_type, host, port) == -1)
 	{
 		s->error = TWIRC_ERR_SOCKET_CONNECT;
 		return -1;
@@ -157,7 +159,7 @@ int twirc_disconnect(twirc_state_t *s)
 	twirc_cmd_quit(s);
 	
 	// Close the socket and return if that worked
-	return tcpsnob_close(s->socket_fd);
+	return tcpsock_close(s->socket_fd);
 
 	// Note that we are NOT calling the disconnect event handlers from
 	// here; this is on purpose! We only want to call these from within
@@ -1146,7 +1148,7 @@ int libtwirc_handle_event(twirc_state_t *s, struct epoll_event *epev)
 			s->error = TWIRC_ERR_SOCKET_RECV;
 			
 			// We were connected but now seem to be disconnected?
-			if (twirc_is_connected(s) && tcpsnob_status(s->socket_fd) == -1)
+			if (twirc_is_connected(s) && tcpsock_status(s->socket_fd) == -1)
 			{
 				// If so, call the disconnect event handlers
 				libtwirc_on_disconnect(s);
@@ -1226,7 +1228,7 @@ int libtwirc_send(twirc_state_t *s, const char *msg)
 	buf[msg_len+2] = '\0';
 
 	// Actually send the message
-	int ret = tcpsnob_send(s->socket_fd, buf, buf_len);
+	int ret = tcpsock_send(s->socket_fd, buf, buf_len);
 	
 	// Dispatch the outgoing event
 	libtwirc_process_msg(s, msg, 1);
@@ -1245,7 +1247,7 @@ int libtwirc_recv(twirc_state_t *s, char *buf, size_t len)
 {
 	// Receive data
 	ssize_t res_len;
-	res_len = tcpsnob_receive(s->socket_fd, buf, len - 1);
+	res_len = tcpsock_receive(s->socket_fd, buf, len - 1);
 
 	// Check if tcpsno_receive() reported an error
 	if (res_len == -1)
@@ -1320,7 +1322,7 @@ int twirc_tick(twirc_state_t *s, int timeout)
 		// the connection or keep it alive. One exception: if we can 
 		// actually determine, right here, that the connection seems to
 		// be down, then we'll set off the disconnect event handlers.
-		// For this, we'll use tcpsnob_status().
+		// For this, we'll use tcpsock_status().
 
 		// Set the error accordingly:
 		//  - TWIRC_ERR_EPOLL_SIG  if epoll_pwait() caught a signal
@@ -1328,7 +1330,7 @@ int twirc_tick(twirc_state_t *s, int timeout)
 		s->error = errno == EINTR ? TWIRC_ERR_EPOLL_SIG : TWIRC_ERR_EPOLL_WAIT;
 		
 		// Were we connected previously but now seem to be disconnected?
-		if (twirc_is_connected(s) && tcpsnob_status(s->socket_fd) == -1)
+		if (twirc_is_connected(s) && tcpsock_status(s->socket_fd) == -1)
 		{
 			// ...if so, call the disconnect event handlers
 			libtwirc_on_disconnect(s);
