@@ -7,7 +7,7 @@
 #include <string.h>     // strlen(), strerror()
 #include <sys/epoll.h>  // epoll_create(), epoll_ctl(), epoll_wait()
 #include <time.h>       // time() (as seed for rand())
-#include <signal.h>	// sigset_t et al
+#include <signal.h>     // sigset_t et al
 #include "tcpsock.h"
 #include "libtwirc.h"
 #include "libtwirc_internal.h"
@@ -23,82 +23,6 @@ libtwirc_oom(twirc_state_t *s)
 {
 	s->error = TWIRC_ERR_OUT_OF_MEMORY;
 	return -1;
-}
-
-/*
- * Ininitates an anonymous connection with the given server.
- * The username will be `justinfan` plus a randomly generated numeric suffix.
- * Returns 0 if the connection process has started and is now in progress,
- * -1 if the connection attempt failed (check the state's error and errno).
- */
-int
-twirc_connect_anon(twirc_state_t *s, const char *host, const char *port)
-{
-	int r = rand() % (10 * TWIRC_USER_ANON_MAX_DIGITS);
-	size_t len = (strlen(TWIRC_USER_ANON) + TWIRC_USER_ANON_MAX_DIGITS + 1); 
-
-	char *anon = malloc(len * sizeof(char));
-	if (anon == NULL) { return libtwirc_oom(s); }
-	snprintf(anon, len, "%s%d", TWIRC_USER_ANON, r);
-
-	int res = twirc_connect(s, host, port, anon, "null");
-	free(anon);
-	return res;
-}
-
-/*
- * Initiates a connection with the given server using the given credentials.
- * Returns 0 if the connection process has started and is now in progress, 
- * -1 if the connection attempt failed (check the state's error and errno).
- */
-int
-twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass)
-{
-	// Create socket
-	s->socket_fd = tcpsock_create(s->ip_type, TCPSOCK_NONBLOCK);
-	if (s->socket_fd < 0)
-	{
-		s->error = TWIRC_ERR_SOCKET_CREATE;
-		return -1;
-	}
-
-	// Create epoll instance 
-	s->epfd = epoll_create(1);
-	if (s->epfd < 0)
-	{
-		s->error = TWIRC_ERR_EPOLL_CREATE;
-		return -1;
-	}
-
-	// Set up the epoll instance
-	struct epoll_event eev = { 0 };
-	eev.data.ptr = s;
-	eev.events = EPOLLRDHUP | EPOLLOUT | EPOLLIN | EPOLLET;
-	int epctl_result = epoll_ctl(s->epfd, EPOLL_CTL_ADD, s->socket_fd, &eev);
-	
-	if (epctl_result)
-	{
-		// Socket could not be registered for IO
-		s->error = TWIRC_ERR_EPOLL_CTL;
-		return -1;
-	}
-
-	// Properly initialize the login struct and copy the login data into it
-	s->login.host = strdup(host);
-	s->login.port = strdup(port);
-	s->login.nick = strdup(nick);
-	s->login.pass = strdup(pass);
-
-	// Connect the socket (and handle a possible connection error)
-	if (tcpsock_connect(s->socket_fd, s->ip_type, host, port) == -1)
-	{
-		s->error = TWIRC_ERR_SOCKET_CONNECT;
-		return -1;
-	}
-
-	// We are in the process of connecting!
-	s->status = TWIRC_STATUS_CONNECTING;
-	return 0;
 }
 
 /*
@@ -144,120 +68,6 @@ libtwirc_auth(twirc_state_t *s)
 	return 0;
 }
 
-/*
- * Sends the QUIT command to the server, then terminates the connection and 
- * calls both the internal as well as external disconnect event handlers.
- * Returns 0 on success, -1 if the socket could not be closed (see errno).
- */ 
-int
-twirc_disconnect(twirc_state_t *s)
-{
-	// Say bye-bye to the IRC server
-	twirc_cmd_quit(s);
-	
-	// Close the socket and return if that worked
-	return tcpsock_close(s->socket_fd);
-
-	// Note that we are NOT calling the disconnect event handlers from
-	// here; this is on purpose! We only want to call these from within
-	// libtwirc_handle_event() and, in one case, twirc_tick(), to avoid
-	// situations where they might be raised twice. Remember: closing 
-	// the socket here might lead to an epoll event that 'naturally' 
-	// leads to us calling the disconnect handlers anyway. If that does
-	// not happen, well, then so be it. If the user called upon this
-	// function, they should expect the connection to be down shortly
-	// after. Of course, this would leave us in an inconsistent state,
-	// as s->state would report that we're still connected, but oh well.
-	// TODO test/investigate further if this could be an issue or not.
-}
-
-/*
- * Sets all callback members to the dummy callback
- */
-void
-twirc_init_callbacks(twirc_callbacks_t *cbs)
-{
-	// TODO figure out if there is a more elegant and dynamic way...
-	cbs->connect         = libtwirc_on_null;
-	cbs->welcome         = libtwirc_on_null;
-	cbs->globaluserstate = libtwirc_on_null;
-	cbs->capack          = libtwirc_on_null;
-	cbs->ping            = libtwirc_on_null;
-	cbs->join            = libtwirc_on_null;
-	cbs->part            = libtwirc_on_null;
-	cbs->mode            = libtwirc_on_null;
-	cbs->names           = libtwirc_on_null;
-	cbs->privmsg         = libtwirc_on_null;
-	cbs->whisper         = libtwirc_on_null;
-	cbs->action          = libtwirc_on_null;
-	cbs->notice          = libtwirc_on_null;
-	cbs->roomstate       = libtwirc_on_null;
-	cbs->usernotice      = libtwirc_on_null;
-	cbs->userstate       = libtwirc_on_null;
-	cbs->clearchat       = libtwirc_on_null;
-	cbs->clearmsg        = libtwirc_on_null;
-	cbs->hosttarget      = libtwirc_on_null;
-	cbs->reconnect       = libtwirc_on_null;
-	cbs->disconnect      = libtwirc_on_null;
-	cbs->invalidcmd      = libtwirc_on_null;
-	cbs->other           = libtwirc_on_null;
-	cbs->outbound        = libtwirc_on_null;
-}
-
-/*
- * Returns a pointer to the state's twirc_callbacks structure. 
- * This allows the user to set select callbacks to their handler functions.
- * Under no circumstances should the user set any callback to NULL, as this
- * will eventually lead to a segmentation fault, as libtwirc relies on the
- * fact that every callback that wasn't assigned to by the user is assigned
- * to an internal dummy (null) event handler.
- */
-twirc_callbacks_t*
-twirc_get_callbacks(twirc_state_t *s)
-{
-	return &s->cbs;
-}
-
-/*
- * Returns a pointer to a twirc_state struct, which represents the state of
- * the connection to the server, the state of the user, holds the login data,
- * all callback function pointers for event handling and much more. Returns
- * a NULL pointer if any errors occur during initialization.
- */
-twirc_state_t*
-twirc_init()
-{
-	// Seed the random number generator
-	srand(time(NULL));
-
-	// Init state struct
-	twirc_state_t *s = malloc(sizeof(twirc_state_t));
-	if (s == NULL) { return NULL; } 
-	memset(s, 0, sizeof(twirc_state_t));
-
-	// Set some defaults / initial values
-	s->status    = TWIRC_STATUS_DISCONNECTED;
-	s->ip_type   = TWIRC_IPV4;
-	s->socket_fd = -1;
-	s->error     = 0;
-	
-	// Initialize the buffer - it will be twice the message size so it can
-	// easily hold an incomplete message in addition to a complete one
-	s->buffer = malloc(2 * TWIRC_MESSAGE_SIZE * sizeof(char));
-	if (s->buffer == NULL) { return NULL; } 
-	s->buffer[0] = '\0';
-
-	// Make sure the structs within state are zero-initialized
-	memset(&s->login, 0, sizeof(twirc_login_t));
-	memset(&s->cbs,   0, sizeof(twirc_callbacks_t));
-
-	// Set all callbacks to the dummy callback
-	twirc_init_callbacks(&s->cbs);
-
-	// All done
-	return s;
-}
-
 static void
 libtwirc_free_callbacks(twirc_state_t *s)
 {
@@ -282,34 +92,6 @@ libtwirc_free_login(twirc_state_t *s)
 	s->login.pass = NULL;
 	s->login.name = NULL;
 	s->login.id   = NULL;
-}
-
-/*
- * Frees the twirc_state and all of its members.
- */
-void
-twirc_free(twirc_state_t *s)
-{
-	close(s->epfd);
-	libtwirc_free_callbacks(s);
-	libtwirc_free_login(s);
-	free(s->buffer);
-	free(s);
-	s = NULL;
-}
-
-/*
- * Schwarzeneggers the connection with the server and frees the twirc_state.
- * Hence, do not call twirc_free() after this function, it's already done.
- */
-void
-twirc_kill(twirc_state_t *s)
-{
-	if (twirc_is_connected(s))
-	{
-		twirc_disconnect(s);
-	}
-	twirc_free(s);
 }
 
 /*
@@ -1290,6 +1072,224 @@ libtwirc_recv(twirc_state_t *s, char *buf, size_t len)
 
 	// Return the number of bytes received
 	return res_len;
+}
+
+/*
+ * Ininitates an anonymous connection with the given server.
+ * The username will be `justinfan` plus a randomly generated numeric suffix.
+ * Returns 0 if the connection process has started and is now in progress,
+ * -1 if the connection attempt failed (check the state's error and errno).
+ */
+int
+twirc_connect_anon(twirc_state_t *s, const char *host, const char *port)
+{
+	int r = rand() % (10 * TWIRC_USER_ANON_MAX_DIGITS);
+	size_t len = (strlen(TWIRC_USER_ANON) + TWIRC_USER_ANON_MAX_DIGITS + 1); 
+
+	char *anon = malloc(len * sizeof(char));
+	if (anon == NULL) { return libtwirc_oom(s); }
+	snprintf(anon, len, "%s%d", TWIRC_USER_ANON, r);
+
+	int res = twirc_connect(s, host, port, anon, "null");
+	free(anon);
+	return res;
+}
+
+/*
+ * Initiates a connection with the given server using the given credentials.
+ * Returns 0 if the connection process has started and is now in progress, 
+ * -1 if the connection attempt failed (check the state's error and errno).
+ */
+int
+twirc_connect(twirc_state_t *s, const char *host, const char *port, const char *nick, const char *pass)
+{
+	// Create socket
+	s->socket_fd = tcpsock_create(s->ip_type, TCPSOCK_NONBLOCK);
+	if (s->socket_fd < 0)
+	{
+		s->error = TWIRC_ERR_SOCKET_CREATE;
+		return -1;
+	}
+
+	// Create epoll instance 
+	s->epfd = epoll_create(1);
+	if (s->epfd < 0)
+	{
+		s->error = TWIRC_ERR_EPOLL_CREATE;
+		return -1;
+	}
+
+	// Set up the epoll instance
+	struct epoll_event eev = { 0 };
+	eev.data.ptr = s;
+	eev.events = EPOLLRDHUP | EPOLLOUT | EPOLLIN | EPOLLET;
+	int epctl_result = epoll_ctl(s->epfd, EPOLL_CTL_ADD, s->socket_fd, &eev);
+	
+	if (epctl_result)
+	{
+		// Socket could not be registered for IO
+		s->error = TWIRC_ERR_EPOLL_CTL;
+		return -1;
+	}
+
+	// Properly initialize the login struct and copy the login data into it
+	s->login.host = strdup(host);
+	s->login.port = strdup(port);
+	s->login.nick = strdup(nick);
+	s->login.pass = strdup(pass);
+
+	// Connect the socket (and handle a possible connection error)
+	if (tcpsock_connect(s->socket_fd, s->ip_type, host, port) == -1)
+	{
+		s->error = TWIRC_ERR_SOCKET_CONNECT;
+		return -1;
+	}
+
+	// We are in the process of connecting!
+	s->status = TWIRC_STATUS_CONNECTING;
+	return 0;
+}
+
+/*
+ * Sends the QUIT command to the server, then terminates the connection and 
+ * calls both the internal as well as external disconnect event handlers.
+ * Returns 0 on success, -1 if the socket could not be closed (see errno).
+ */ 
+int
+twirc_disconnect(twirc_state_t *s)
+{
+	// Say bye-bye to the IRC server
+	twirc_cmd_quit(s);
+	
+	// Close the socket and return if that worked
+	return tcpsock_close(s->socket_fd);
+
+	// Note that we are NOT calling the disconnect event handlers from
+	// here; this is on purpose! We only want to call these from within
+	// libtwirc_handle_event() and, in one case, twirc_tick(), to avoid
+	// situations where they might be raised twice. Remember: closing 
+	// the socket here might lead to an epoll event that 'naturally' 
+	// leads to us calling the disconnect handlers anyway. If that does
+	// not happen, well, then so be it. If the user called upon this
+	// function, they should expect the connection to be down shortly
+	// after. Of course, this would leave us in an inconsistent state,
+	// as s->state would report that we're still connected, but oh well.
+	// TODO test/investigate further if this could be an issue or not.
+}
+
+/*
+ * Sets all callback members to the dummy callback
+ */
+void
+twirc_init_callbacks(twirc_callbacks_t *cbs)
+{
+	// TODO figure out if there is a more elegant and dynamic way...
+	cbs->connect         = libtwirc_on_null;
+	cbs->welcome         = libtwirc_on_null;
+	cbs->globaluserstate = libtwirc_on_null;
+	cbs->capack          = libtwirc_on_null;
+	cbs->ping            = libtwirc_on_null;
+	cbs->join            = libtwirc_on_null;
+	cbs->part            = libtwirc_on_null;
+	cbs->mode            = libtwirc_on_null;
+	cbs->names           = libtwirc_on_null;
+	cbs->privmsg         = libtwirc_on_null;
+	cbs->whisper         = libtwirc_on_null;
+	cbs->action          = libtwirc_on_null;
+	cbs->notice          = libtwirc_on_null;
+	cbs->roomstate       = libtwirc_on_null;
+	cbs->usernotice      = libtwirc_on_null;
+	cbs->userstate       = libtwirc_on_null;
+	cbs->clearchat       = libtwirc_on_null;
+	cbs->clearmsg        = libtwirc_on_null;
+	cbs->hosttarget      = libtwirc_on_null;
+	cbs->reconnect       = libtwirc_on_null;
+	cbs->disconnect      = libtwirc_on_null;
+	cbs->invalidcmd      = libtwirc_on_null;
+	cbs->other           = libtwirc_on_null;
+	cbs->outbound        = libtwirc_on_null;
+}
+
+/*
+ * Returns a pointer to the state's twirc_callbacks structure. 
+ * This allows the user to set select callbacks to their handler functions.
+ * Under no circumstances should the user set any callback to NULL, as this
+ * will eventually lead to a segmentation fault, as libtwirc relies on the
+ * fact that every callback that wasn't assigned to by the user is assigned
+ * to an internal dummy (null) event handler.
+ */
+twirc_callbacks_t*
+twirc_get_callbacks(twirc_state_t *s)
+{
+	return &s->cbs;
+}
+
+/*
+ * Returns a pointer to a twirc_state struct, which represents the state of
+ * the connection to the server, the state of the user, holds the login data,
+ * all callback function pointers for event handling and much more. Returns
+ * a NULL pointer if any errors occur during initialization.
+ */
+twirc_state_t*
+twirc_init()
+{
+	// Seed the random number generator
+	srand(time(NULL));
+
+	// Init state struct
+	twirc_state_t *s = malloc(sizeof(twirc_state_t));
+	if (s == NULL) { return NULL; } 
+	memset(s, 0, sizeof(twirc_state_t));
+
+	// Set some defaults / initial values
+	s->status    = TWIRC_STATUS_DISCONNECTED;
+	s->ip_type   = TWIRC_IPV4;
+	s->socket_fd = -1;
+	s->error     = 0;
+	
+	// Initialize the buffer - it will be twice the message size so it can
+	// easily hold an incomplete message in addition to a complete one
+	s->buffer = malloc(2 * TWIRC_MESSAGE_SIZE * sizeof(char));
+	if (s->buffer == NULL) { return NULL; } 
+	s->buffer[0] = '\0';
+
+	// Make sure the structs within state are zero-initialized
+	memset(&s->login, 0, sizeof(twirc_login_t));
+	memset(&s->cbs,   0, sizeof(twirc_callbacks_t));
+
+	// Set all callbacks to the dummy callback
+	twirc_init_callbacks(&s->cbs);
+
+	// All done
+	return s;
+}
+
+/*
+ * Frees the twirc_state and all of its members.
+ */
+void
+twirc_free(twirc_state_t *s)
+{
+	close(s->epfd);
+	libtwirc_free_callbacks(s);
+	libtwirc_free_login(s);
+	free(s->buffer);
+	free(s);
+	s = NULL;
+}
+
+/*
+ * Schwarzeneggers the connection with the server and frees the twirc_state.
+ * Hence, do not call twirc_free() after this function, it's already done.
+ */
+void
+twirc_kill(twirc_state_t *s)
+{
+	if (twirc_is_connected(s))
+	{
+		twirc_disconnect(s);
+	}
+	twirc_free(s);
 }
 
 /*
