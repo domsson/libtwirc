@@ -200,7 +200,7 @@ struct twirc_callbacks
  */
 
 // Initialization
-twirc_state_t     *twirc_init();
+twirc_state_t     *twirc_init(void);
 twirc_callbacks_t *twirc_get_callbacks(twirc_state_t *s);
 
 // Connecting and disconnecting
