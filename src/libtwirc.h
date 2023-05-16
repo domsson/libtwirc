@@ -1,6 +1,8 @@
 #ifndef LIBTWIRC_H
 #define LIBTWIRC_H
 
+#include <stdint.h>
+
 // Name & Version
 #define TWIRC_NAME "libtwirc"
 #define TWIRC_VER_MAJOR 0
