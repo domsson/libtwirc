@@ -1231,7 +1231,7 @@ twirc_get_callbacks(twirc_state_t *s)
  * a NULL pointer if any errors occur during initialization.
  */
 twirc_state_t*
-twirc_init()
+twirc_init(void)
 {
 	// Seed the random number generator
 	srand(time(NULL));

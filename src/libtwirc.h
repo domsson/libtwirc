@@ -1,6 +1,8 @@
 #ifndef LIBTWIRC_H
 #define LIBTWIRC_H
 
+#include <stdint.h>
+
 // Name & Version
 #define TWIRC_NAME "libtwirc"
 #define TWIRC_VER_MAJOR 0
@@ -200,7 +202,7 @@ struct twirc_callbacks
  */
 
 // Initialization
-twirc_state_t     *twirc_init();
+twirc_state_t     *twirc_init(void);
 twirc_callbacks_t *twirc_get_callbacks(twirc_state_t *s);
 
 // Connecting and disconnecting
